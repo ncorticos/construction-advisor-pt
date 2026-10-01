@@ -399,13 +399,14 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 
 <header>
   <div class="hbar">
-    <div class="brand"><b>Construction Advisor PT</b><span data-t="brandsub">Envolvente e Orçamento SCE</span></div>
+    <div class="brand"><b>Construction Advisor PT</b><span data-t="brandsub">SCE Envelope + Budget</span></div>
     <div class="filechip sitechip" id="sitechip">
       <span class="loc" id="chipLoc"></span>
       <span class="meta" id="chipMeta"></span>
     </div>
-    <div class="langsel" id="langsel" role="group" aria-label="Idioma">
-      <button type="button" data-lang="pt" aria-pressed="true" title="Edição exclusivamente em português">PT</button>
+    <div class="langsel" id="langsel" role="group" aria-label="Language / Idioma">
+      <button type="button" data-lang="en" aria-pressed="true" title="English">EN</button>
+      <button type="button" data-lang="pt" aria-pressed="false" title="Português">PT</button>
     </div>
   </div>
   <nav class="tabs" id="tabsNav" hidden>
@@ -571,7 +572,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.0.1',
+  version:     '2.0.2',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -584,7 +585,7 @@ const APP = {
    factory — rather than at each of the several hundred call sites. A string
    with no entry in the dictionary falls through unchanged, so an untranslated
    phrase appears in English instead of breaking the page. */
-let LANG = 'pt';   // PT edition: Portuguese only
+let LANG = 'en';
 const PT = {};                       // European Portuguese, filled in at the foot of this script
 const STATIC_PT = {};                // static markup blocks, keyed by data-t
 const I18N_MISSING = new Set();      // anything asked for but not translated
@@ -5213,7 +5214,7 @@ function restartAssessment() {
   $('#empty').hidden = false;
   $('#tabsNav').hidden = true;
   $('#sitechip').classList.remove('on');
-  document.title = APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope Designer');
+  document.title = APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope + Budget');
   window.scrollTo(0, 0);
   toast('Assessment reset');
 }
@@ -5266,13 +5267,19 @@ const BUDGET_PT_NAME = {
   ground:'Pavimento térreo', wext:'Parede exterior', wint:'Parede interior',
   win:'Vãos envidraçados', shd:'Dispositivos de sombreamento / oclusão'
 };
+const BUDGET_EN_NAME = {
+  roof:'Roof', pav:'Floor over unheated space / outside air',
+  ground:'Ground floor', wext:'External wall', wint:'Internal wall',
+  win:'Glazed openings', shd:'Shading / shutter devices'
+};
 /* Registered here — after STATE_REGISTRY exists — so Save/Restart/CSV round-trip budget with thermal state. */
 STATE_REGISTRY.BUDGET_STATE = BUDGET_STATE;
 STATE_DEFAULTS.BUDGET_STATE = JSON.parse(JSON.stringify(BUDGET_STATE));
+const euroLocale = () => LANG === 'pt' ? 'pt-PT' : 'en-IE';
 const euro = v => v === null || v === undefined || !isFinite(+v) ? '—'
-  : (+v).toLocaleString('pt-PT', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' €';
+  : (+v).toLocaleString(euroLocale(), { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' €';
 const m2fmt = v => v === null || v === undefined || !isFinite(+v) ? '—'
-  : (+v).toLocaleString('pt-PT', { maximumFractionDigits:1 }) + ' m²';
+  : (+v).toLocaleString(euroLocale(), { maximumFractionDigits:1 }) + ' m²';
 function budgetTotals() {
   const per = {};
   let sum = 0, n = 0;
@@ -5295,17 +5302,17 @@ function costPanel(host, cfg) {
     box.innerHTML = '';
     const B = budgetTotals();
     const mine = B.per[cfg.key];
-    box.appendChild(section('Custo e quantidades — Gerador de Preços',
-      'Unidade de obra ao m²: área × preço unitário lido no banco de preços',
+    box.appendChild(section(t('Cost and quantities — Gerador de Preços'),
+      t('Work unit per m²: area × unit price read from the price bank'),
       'custo-' + cfg.key, () => {
         const live = budgetTotals();   // live at click time, not at render time
         return csvRows(
-          [['Parcela', 'Área (m²)', 'Preço unitário (€/m²)', 'Total (€)']]
-          .concat(BUDGET_ORDER.map(k => [BUDGET_PT_NAME[k],
+          [[t('Item'), t('Area (m²)'), t('Unit price (€/m²)'), t('Total (€)')]]
+          .concat(BUDGET_ORDER.map(k => [(LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k],
             live.per[k].area === null ? '' : +live.per[k].area,
             live.per[k].price === null ? '' : +live.per[k].price,
             live.per[k].total === null ? '' : live.per[k].total.toFixed(2)]))
-          .concat([[live.n + ' parcela(s) com preço', '', '', live.sum.toFixed(2)]]));
+          .concat([[t(live.n + ' of ' + BUDGET_ORDER.length + ' priced items'), '', '', live.sum.toFixed(2)]]));
       }));
     const grid = el('div', { class:'costgrid' });
     const mkNum = (lab, val, ph, cb) => {
@@ -5320,51 +5327,51 @@ function costPanel(host, cfg) {
       wrap.appendChild(inp);
       return wrap;
     };
-    grid.appendChild(mkNum('Área do elemento', S.area, 'm² — ex.: 120', v => { S.area = v; }));
-    grid.appendChild(mkNum('Preço unitário', S.price, '€/m² — ler no Gerador', v => { S.price = v; }));
+    grid.appendChild(mkNum(t('Element area'), S.area, t('m² — e.g. 120'), v => { S.area = v; }));
+    grid.appendChild(mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; }));
     box.appendChild(el('div', { class:'costbox' }, [
       grid,
       el('div', null, [
         el('div', { class:'limitrow' }, [
           el('span', { html:'<b>' + m2fmt(mine.area) + '</b> × <b>' + euro(mine.price).replace(' €','') + ' €/m²</b>' }),
-          el('span', { html:'Total da parcela: <b>' + (mine.total === null ? '—' : euro(mine.total)) + '</b>' })
+          el('span', { html:t('Element total:') + ' <b>' + (mine.total === null ? '—' : euro(mine.total)) + '</b>' })
         ]),
         el('div', { class:'ctotal' }, [
-          el('span', { html:'Orçamento global (' + B.n + ' de ' + BUDGET_ORDER.length + ' parcelas com preço): <b>' + euro(B.sum) + '</b>' }),
-          el('span', { html:'<span style="color:var(--muted)">A visitar cada separador actualiza este total.</span>' })
+          el('span', { html:t('Overall budget') + ' (' + t(B.n + ' of ' + BUDGET_ORDER.length + ' priced items') + '): <b>' + euro(B.sum) + '</b>' }),
+          el('span', { html:'<span style="color:var(--muted)">' + t('Visiting each tab refreshes this total.') + '</span>' })
         ]),
-        el('p', { class:'costlink', html:'Preço de referência em <a href="' + cfg.link + '" target="_blank" rel="noopener noreferrer">' + cfg.linkLabel + '</a>'
-          + ' — Gerador de Preços, CYPE. ' + (cfg.unitHint || '')
-          + ' Os preços do banco são dinâmicos e estão sujeitos a direitos de autor: esta aplicação não os reproduz, apenas multiplica o valor que o estudante aqui regista. Estimativa pedagógica — não substitui um orçamento.' })
+        el('p', { class:'costlink', html:t('Reference price at') + ' <a href="' + cfg.link + '" target="_blank" rel="noopener noreferrer">' + cfg.linkLabel + '</a>'
+          + ' — Gerador de Preços, CYPE. ' + t(cfg.unitHint || '')
+          + ' ' + t('Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.') })
       ])
     ]));
     box.appendChild(hint('custo-' + cfg.key,
-      'Uma <b>unidade de obra</b> no Gerador de Preços é um sistema completo ao m² — materiais, mão-de-obra, meios auxiliares e custos indirectos já incluídos no preço composto. É por isso que este painel pede <b>área × preço unitário</b> e não o preço de cada camada: compare aqui soluções que cumpram o mesmo U e leia, lado a lado, o que cada grau de exigência térmica custa. Sem preço unitário não há total — o travessão é intencional.'));
+      'A <b>unit of work</b> in the Gerador de Preços is a complete system per m² — materials, labour, auxiliary means and overheads already included in the composite price. That is why this panel asks for <b>area × unit price</b> and not the price of each layer: compare solutions that meet the same U here and read, side by side, what each degree of thermal ambition costs. Without a unit price there is no total — the dash is deliberate.'));
   }
   render();
 }
 const COST_PANELS = {
   roofs:  [{ key:'roof', link:GDP_BASE + '/Coberturas.html',
              linkLabel:'Q · Coberturas',
-             unitHint:'Procurar a unidade (contínua, inclinada, invertida) mais próxima da solução composta acima.' }],
+             unitHint:'Find the unit (continuous, pitched, inverted) closest to the assembly above.' }],
   floors: [{ key:'pav', link:GDP_BASE + '/Revestimentos.html',
              linkLabel:'R · Revestimentos',
-             unitHint:'Para o pavimento sobre espaço não útil / ar exterior: revestimento + isolamento da solução acima.' },
+             unitHint:'For the floor over unheated space / outside air: finish + insulation of the solution above.' },
            { key:'ground', link:GDP_BASE + '/Revestimentos.html',
              linkLabel:'R · Revestimentos',
-             unitHint:'Para o pavimento térreo: a regulação lê a forma do piso (Tabelas 27 e 28), o orçamento lê a unidade de obra completa.' }],
+             unitHint:'For the ground floor: the regulation reads the shape of the slab (Tables 27 and 28), the budget reads the complete unit of work.' }],
   wallsext: [{ key:'wext', link:GDP_BASE + '/Fachadas__divisoes_e_proteccoes.html',
              linkLabel:'F · Fachadas, divisões e protecções',
-             unitHint:'Procurar o sistema de parede (simples, dupla, ETICS) mais próximo da constituição acima, com a mesma espessura de isolamento.' }],
+             unitHint:'Find the wall system (single, cavity, ETICS) closest to the build-up above, with the same insulation thickness.' }],
   wallsint: [{ key:'wint', link:GDP_BASE + '/Fachadas__divisoes_e_proteccoes.html',
              linkLabel:'F · Fachadas, divisões e protecções',
-             unitHint:'Paredes interiores e tabiques: o mesmo capítulo, na família das divisões.' }],
+             unitHint:'Internal walls and partitions: same chapter, in the partitions family.' }],
   windows: [{ key:'win', link:GDP_BASE + '/Vaos.html',
              linkLabel:'L · Vãos',
-             unitHint:'Caixilharia + vidro + dispositivo de oclusão nocturna: a unidade de vão completa.' }],
+             unitHint:'Frame + glass + night-time shutter device: the complete opening unit.' }],
   shaders: [{ key:'shd', link:GDP_BASE + '/Vaos.html',
              linkLabel:'L · Vãos — dispositivos',
-             unitHint:'Estores, portadas e telas: orçamentar o dispositivo exterior à parte do vão.' }],
+             unitHint:'Blinds, shutters and screens: budget the external device apart from the opening.' }],
   iaq:     []
 };
 
@@ -5388,14 +5395,14 @@ TABS.forEach(tab => {
     orig(host);
     (COST_PANELS[tab.key] || []).forEach(cfg => costPanel(host, cfg));
     if (tab.key === 'iaq') {
-      host.appendChild(section('Ventilação e orçamento', 'Onde o custo da renovação de ar se lê'));
-      host.appendChild(el('p', { class:'costlink', html:'Condutas, grelhas e equipamentos de ventilação orçamentam-se em '
-        + '<a href="' + GDP_BASE + '/Instalacoes.html" target="_blank" rel="noopener noreferrer">I · Instalações</a>'
-        + ' — Gerador de Preços, CYPE. Regra pedagógica: o caudal mínimo (R<sub>ph</sub>) é uma exigência de saúde; o seu custo pertence ao orçamento como qualquer outra unidade de obra.' }));
+      host.appendChild(section(t('Ventilation and budgeting'), t('Where the cost of air renewal is read')));
+      host.appendChild(el('p', { class:'costlink', html:t('Ducts, grilles and ventilation equipment are budgeted under')
+        + ' <a href="' + GDP_BASE + '/Instalacoes.html" target="_blank" rel="noopener noreferrer">I · Instalações</a>'
+        + ' ' + t('— Gerador de Preços, CYPE. Teaching rule: the minimum flow rate (R<sub>ph</sub>) is a health requirement; its cost belongs in the budget like any other unit of work.') }));
     }
     if (tab.key === 'climate') {
       host.appendChild(hint('clima-orcamento',
-        'O clima fixa a exigência (I1–I3, V1–V3) e a exigência fixa a espessura — e a espessura fixa o custo. Ao percorrer os separadores, cada solução que cumprir o limite pede área e preço unitário; o orçamento global vai-se somando nos painéis de <b>Custo e quantidades</b>.'));
+        'Climate sets the requirement (I1–I3, V1–V3), the requirement sets the thickness — and the thickness sets the cost. As you work through the tabs, each solution that meets the limit asks for area and unit price; the overall budget accumulates in the <b>Cost and quantities</b> panels.'));
     }
   };
 });
@@ -5403,7 +5410,7 @@ TABS.forEach(tab => {
 /* --- the references, built from one list so the footer and the pages agree - */
 const REFS = [
   ['CYPE Ingenieros. <i>Gerador de Preços para construção civil — Portugal</i>.',
-   'Banco de preços de unidades de obra (obra nova, reabilitação, espaços urbanos): preços compostos ao m² por capítulo — F fachadas, Q coberturas, L vãos, N isolamentos, R revestimentos, I instalações. Fonte dos preços unitários dos painéis de custo; consultado em linha, não reproduzido.',
+   'Price bank for units of work (new build, refurbishment, urban spaces): composite prices per m² by chapter — F facades, Q roofs, L openings, N insulation, R finishes, I services. Source of the cost panels\u2019 unit prices; consulted online, not reproduced.',
    'https://geradordeprecos.info/obra_nova'],
   ['Portugal. (2020). <i>Decreto-Lei n.º 101-D/2020, de 7 de dezembro</i>, as amended by <i>Decreto-Lei n.º 11/2025, de 19 de fevereiro</i>. Diário da República, 1.ª série.',
    'Energy performance of buildings and the SCE. Repeals the framework of Decreto-Lei n.º 118/2013, which had itself revoked the RCCTE.',
@@ -5769,7 +5776,7 @@ function setLanguage(lang) {
   applyStatic();
   $$('#langsel button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === lang ? 'true' : 'false'));
   document.title = STATE.site ? APP.tabName + ' — ' + (STATE.site.conc || STATE.site.nuts)
-    : APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope Designer');
+    : APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope + Budget');
   if (STATE.site) mountApp(STATE.site, STATE.tab);      // rebuild every page in the new language
 }
 $$('#langsel button').forEach(b => b.addEventListener('click', () => setLanguage(b.dataset.lang)));
@@ -5779,7 +5786,8 @@ initSetup();
   let saved = null;
   try { saved = localStorage.getItem('cona-lang'); } catch (e) {}
   if (!saved && /^pt\b/i.test(navigator.language || '')) saved = 'pt';
-  setLanguage('pt');   // PT edition: exclusively for Portuguese students — no language switch
+  if (!saved && /^pt\b/i.test(navigator.language || '')) saved = 'pt';
+  setLanguage(saved || 'en');
 })();
 
 /* ==================================== 8. EUROPEAN PORTUGUESE ==
@@ -6703,11 +6711,56 @@ Object.assign(PT_HINT, {
     'Onde um sistema mecânico recupera calor do ar que extrai, esta é a eficiência que o manual permite por defeito, na ausência de melhor informação — lida no tipo de permutador e não no fabricante. Um permutador de placas em contra fluxo recupera %1 % do que recupera um de fluxos cruzados da mesma família, %2 %; a roda térmica higroscópica corrente fica próxima de ambos.'
 });
 
+
+/* v2.0.2: English–Portuguese for the cost/quantity/budget layer. Keys are the
+   exact English strings passed through t(); anything missing falls back to
+   English instead of breaking the page. */
+Object.assign(PT, {
+  'Cost and quantities — Gerador de Preços': 'Custo e quantidades — Gerador de Preços',
+  'Work unit per m²: area × unit price read from the price bank': 'Unidade de obra ao m²: área × preço unitário lido no banco de preços',
+  'Item': 'Parcela',
+  'Area (m²)': 'Área (m²)',
+  'Unit price (€/m²)': 'Preço unitário (€/m²)',
+  'Total (€)': 'Total (€)',
+  '{} of {} priced items': '{} de {} parcelas com preço',
+  'Element area': 'Área do elemento',
+  'm² — e.g. 120': 'm² — ex.: 120',
+  'Unit price': 'Preço unitário',
+  '€/m² — read from the Gerador': '€/m² — ler no Gerador',
+  'Element total:': 'Total da parcela:',
+  'Overall budget': 'Orçamento global',
+  'Visiting each tab refreshes this total.': 'A visitar cada separador actualiza este total.',
+  'Reference price at': 'Preço de referência em',
+  'Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.': 'Os preços do banco são dinâmicos e estão sujeitos a direitos de autor: esta aplicação não os reproduz, apenas multiplica o valor que o estudante aqui regista. Estimativa pedagógica — não substitui um orçamento.',
+  'Floor over unheated space / outside air': 'Pavimento sobre espaço não útil / ar exterior',
+  'Ground floor': 'Pavimento térreo',
+  'External wall': 'Parede exterior',
+  'Internal wall': 'Parede interior',
+  'Glazed openings': 'Vãos envidraçados',
+  'Shading / shutter devices': 'Dispositivos de sombreamento / oclusão',
+  'Find the unit (continuous, pitched, inverted) closest to the assembly above.': 'Procurar a unidade (contínua, inclinada, invertida) mais próxima da solução composta acima.',
+  'For the floor over unheated space / outside air: finish + insulation of the solution above.': 'Para o pavimento sobre espaço não útil / ar exterior: revestimento + isolamento da solução acima.',
+  'For the ground floor: the regulation reads the shape of the slab (Tables 27 and 28), the budget reads the complete unit of work.': 'Para o pavimento térreo: a regulação lê a forma do piso (Tabelas 27 e 28), o orçamento lê a unidade de obra completa.',
+  'Find the wall system (single, cavity, ETICS) closest to the build-up above, with the same insulation thickness.': 'Procurar o sistema de parede (simples, dupla, ETICS) mais próximo da constituição acima, com a mesma espessura de isolamento.',
+  'Internal walls and partitions: same chapter, in the partitions family.': 'Paredes interiores e tabiques: o mesmo capítulo, na família das divisões.',
+  'Frame + glass + night-time shutter device: the complete opening unit.': 'Caixilharia + vidro + dispositivo de oclusão nocturna: a unidade de vão completa.',
+  'Blinds, shutters and screens: budget the external device apart from the opening.': 'Estores, portadas e telas: orçamentar o dispositivo exterior à parte do vão.',
+  'Ventilation and budgeting': 'Ventilação e orçamento',
+  'Where the cost of air renewal is read': 'Onde o custo da renovação de ar se lê',
+  'Ducts, grilles and ventilation equipment are budgeted under': 'Condutas, grelhas e equipamentos de ventilação orçamentam-se em',
+  '— Gerador de Preços, CYPE. Teaching rule: the minimum flow rate (R<sub>ph</sub>) is a health requirement; its cost belongs in the budget like any other unit of work.': '— Gerador de Preços, CYPE. Regra pedagógica: o caudal mínimo (R<sub>ph</sub>) é uma exigência de saúde; o seu custo pertence ao orçamento como qualquer outra unidade de obra.',
+  'Price bank for units of work (new build, refurbishment, urban spaces): composite prices per m² by chapter — F facades, Q roofs, L openings, N insulation, R finishes, I services. Source of the cost panels\u2019 unit prices; consulted online, not reproduced.': 'Banco de preços de unidades de obra (obra nova, reabilitação, espaços urbanos): preços compostos ao m² por capítulo — F fachadas, Q coberturas, L vãos, N isolamentos, R revestimentos, I instalações. Fonte dos preços unitários dos painéis de custo; consultado em linha, não reproduzido.'
+});
+['roof','pav','ground','wext','wint','win','shd'].forEach(k => { PT_HINT['custo-' + k] =
+  'Uma <b>unidade de obra</b> no Gerador de Preços é um sistema completo ao m² — materiais, mão-de-obra, meios auxiliares e custos indirectos já incluídos no preço composto. É por isso que este painel pede <b>área × preço unitário</b> e não o preço de cada camada: compare aqui soluções que cumpram o mesmo U e leia, lado a lado, o que cada grau de exigência térmica custa. Sem preço unitário não há total — o travessão é intencional.'; });
+PT_HINT['clima-orcamento'] =
+  'O clima fixa a exigência (I1–I3, V1–V3) e a exigência fixa a espessura — e a espessura fixa o custo. Ao percorrer os separadores, cada solução que cumprir o limite pede área e preço unitário; o orçamento global vai-se somando nos painéis de <b>Custo e quantidades</b>.';
+
 /* PT v2.0.0: the boot above ran before this dictionary existed, so static
    markup ([data-t]) is re-applied now that every STATIC_PT entry is filled.
    Idempotent: applyStatic() rebuilds from the English shadow copy. */
 applyStatic();
-document.title = APP.tabName + ' — Envolvente e Orçamento SCE';
+document.title = APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope + Budget');
 
 </script>
 </body>
