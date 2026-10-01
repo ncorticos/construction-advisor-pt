@@ -392,6 +392,15 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
   border:1px solid var(--line); border-radius:6px; background:var(--wash); color:var(--ink)}
 .costgrid input:focus{outline:none; border-color:var(--c1); background:#fff}
 .costlink{font-size:12px; margin-top:8px; color:var(--ink2)}
+/* --- v2.1.0: material mosaic ------------------------------------------- */
+.mosaic{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:12px 0 4px}
+.mcard{display:flex; flex-direction:column; align-items:flex-start; gap:6px; text-align:left; font:inherit;
+  background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer}
+.mcard:hover{border-color:var(--faint)}
+.mcard.sel{border-color:var(--ink); box-shadow:0 0 0 1px var(--ink)}
+.mcard .swatch{width:100%; height:26px; border-radius:6px}
+.mcard .mname{font-size:12.5px; font-weight:600; line-height:1.35}
+.mcard .msub{font-family:var(--mono); font-size:10.5px; color:var(--muted)}
 </style>
 </head>
 
@@ -428,8 +437,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
       <p data-t="setupBody">Portuguese thermal regulation classifies a site from two things only: the
         <b>NUTS III</b> region it falls in, and its <b>altitude</b>. Every reference parameter is tabulated for a
         reference altitude and corrected linearly from there. Name the municipality and the height above sea
-        level and this application resolves the winter and summer zones, then works through the envelope
-        element by element — roofs, floors, walls, glazing and shading — against the limits actually in force.</p>
+        level and this application resolves the winter and summer zones, then opens a mosaic of materials — natural and industrialized, relevant to the area — before working through the envelope element by element against the limits actually in force.</p>
 
       <div class="setup-grid">
         <div class="fld">
@@ -572,7 +580,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.0.2',
+  version:     '2.1.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5375,8 +5383,145 @@ const COST_PANELS = {
   iaq:     []
 };
 
+
+/* ================================================================
+   v2.1.0 — MATERIAL MOSAIC (first tab)
+   ----------------------------------------------------------------
+   Availability before solutions: the thirty-three materials of the
+   library split into Natural and Industrial, each card coloured by its
+   envelope family. Picking a card reads the material — conductivity or
+   declared resistance, density, thermal character, traditional
+   provenance where it has one, and the default build-ups it already
+   sits in. The zone context rides along because the zone decides which
+   of these can ever meet a limit. Provenance notes name traditional
+   use, not quarries: confirm availability locally.
+   ================================================================ */
+const MAT_KIND = {};
+['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom']
+  .forEach(k => MAT_KIND[k] = 'natural');
+MATERIALS.forEach(m => { if (!MAT_KIND[m.key]) MAT_KIND[m.key] = 'industrial'; });
+const MAT_ORIGIN = {
+  pedrag:['Traditional load-bearing masonry in the granite north and centre — Minho, Trás-os-Montes, Beiras.',
+          'Alvenaria tradicional de carga do norte e centro graníticos — Minho, Trás-os-Montes, Beiras.'],
+  pedrac:['Traditional masonry and lime country — Lisboa, Arrábida and Algarve limestones.',
+          'Alvenaria tradicional e terra de cal — calcários de Lisboa, da Arrábida e do Algarve.'],
+  pedrab:['Volcanic stone: the islands above all — Açores and Madeira — and the Lisboa volcanic complex.',
+          'Pedra vulcânica: as ilhas acima de tudo — Açores e Madeira — e o complexo vulcânico de Lisboa.'],
+  pedran:['Cut stone for sills, steps and paving; the quarry decides the colour, not the catalogue.',
+          'Cantaria para soleiras, degraus e pavimentos; quem decide a cor é a pedreira e não o catálogo.'],
+  taipa:['Rammed earth and adobe of the Alentejo and Algarve: mass with almost no insulation.',
+         'Taipa e adobe do Alentejo e do Algarve: massa com quase nenhum isolamento.'],
+  madeirae:['Managed pine and other softwoods of the Centro forests, for structure and boarding.',
+            'Pinho bravo e outras resinosas das matas do Centro, para estrutura e soalho.'],
+  madeirad:['Dense hardwoods for floors and joinery where wear decides.',
+            'Folhosas densas para pavimentos e carpintarias onde o desgaste manda.'],
+  soalho:['Boarded floors: the finish that still lets the slab do the thermal work.',
+          'Soalho: o revestimento que continua a deixar a laje fazer o trabalho térmico.'],
+  seixo:['River gravels for ballast, drainage and exposed finishes.',
+         'Seixos de rio para balastro, drenagem e acabamentos à vista.'],
+  icb:['Alentejo cork oak (montado): the only insulation in this library that is grown, not made.',
+       'Sobreiro alentejano (montado): o único isolamento que nesta biblioteca se cultiva e não se fabrica.'],
+  fibrom:['Processed wood-fibre board: bio-based but manufactured — confirm suppliers locally.',
+          'Placa de fibra de madeira: de base biológica mas manufacturada — confirmar fornecedores localmente.']
+};
+/* 'Natural' and 'Industrial' are spelt the same in both languages, so the
+   badges below need no dictionary entry. */
+function thermalCharacter(M, lam) {
+  if (M.ins || (lam !== null && lam <= 0.05))
+    return t('Insulation: buys resistance with almost no mass — this is what closes the gap to the limit.');
+  if (lam !== null && lam >= 1.0)
+    return t('Heavy and conductive: thermal mass with hardly any resistance — never the layer that meets the limit.');
+  if (lam !== null && lam <= 0.1)
+    return t('A natural insulator among heavier materials — useful, but not a substitute for insulation where the zone demands it.');
+  return t('In between: slows heat far more than stone or concrete, insulates far less than a true insulation.');
+}
+const lamEq = M => M.lam !== undefined ? M.lam : (M.d && M.r ? M.d / M.r : null);
+function defaultsUsing(key) {
+  const map = { roof:'roof', pavement:'pav', ground:'ground', wallExt:'wext', wallInt:'wint' };
+  return Object.keys(map).filter(a => (START[a] || []).some(L => L.key === key)).map(a => map[a]);
+}
+function buildMaterials(host) {
+  const Z = STATE.zone;
+  pageHead(host, 'Materials',
+    'Availability before solutions: what the area builds with, natural and industrial, before any of it is asked to meet a limit.');
+  const limR = umax(Z, 'roof'), limW = umax(Z, 'wall');
+  host.appendChild(stats([
+    statCard('Winter zone', Z.wz, null, t('Heating season, base 18 °C')),
+    statCard(t('Roofs') + ' U ' + t('máx'), fmt(limR, 2), 'W/(m²·°C)', Z.wz),
+    statCard(t('External walls') + ' U ' + t('máx'), fmt(limW, 2), 'W/(m²·°C)', Z.wz),
+    statCard(t('In the library'), '33', null, '11 Natural · 22 Industrial')
+  ]));
+  host.appendChild(hint('mat-zone',
+    'The zone above is still the law: in <b>%1</b> a roof may not exceed <b>%2 W/(m²·°C)</b> and a wall <b>%3 W/(m²·°C)</b>. Insulation lives in the mosaic below — every other family is mass, and mass alone has never met a winter limit.',
+    [Z.wz, fmt(limR, 2), fmt(limW, 2)]));
+
+  const box = el('div');
+  host.appendChild(box);
+  let filter = 'all', sel = null;
+  rebuildable(box, (frag, rerender) => {
+    const bar = el('div', { class:'seg', role:'group', 'aria-label':t('Material mosaic') });
+    [['all', t('All materials')], ['natural', 'Natural'], ['industrial', 'Industrial']]
+      .forEach(([v, lab]) => bar.appendChild(el('button',
+        { text:lab, 'aria-pressed': v === filter ? 'true' : 'false', onclick:() => { filter = v; rerender(); } })));
+    frag.appendChild(bar);
+    const grid = el('div', { class:'mosaic' });
+    MATERIALS.filter(m => filter === 'all' || MAT_KIND[m.key] === filter).forEach(m => {
+      const sub = (m.r !== undefined ? 'R ' + fmt(m.r, 2) : 'λ ' + fmt(m.lam, 3))
+        + ' · ' + (MAT_KIND[m.key] === 'natural' ? 'Natural' : 'Industrial');
+      const card = el('button', { class:'mcard' + (sel === m.key ? ' sel' : ''),
+        onclick:() => { sel = (sel === m.key ? null : m.key); rerender(); } });
+      card.appendChild(el('span', { class:'swatch', style:'background:' + materialColor({ key:m.key }) }));
+      card.appendChild(el('span', { class:'mname', text:m.name }));
+      card.appendChild(el('span', { class:'msub', text:sub }));
+      grid.appendChild(card);
+    });
+    frag.appendChild(grid);
+    if (sel && MAT[sel]) {
+      const M = MAT[sel], lam = lamEq(M);
+      const d = el('div', { class:'costbox' });
+      d.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html:'<b>' + t(M.name) + '</b>' }),
+        el('span', { text:(MAT_KIND[sel] === 'natural' ? 'Natural' : 'Industrial') + ' · ' + t(M.group) })
+      ]));
+      const facts = [];
+      if (M.lam !== undefined) facts.push('λ = <b>' + fmt(M.lam, 3) + '</b> W/(m·°C)');
+      else facts.push('R = <b>' + fmt(M.r, 2) + '</b> (m²·°C)/W · ' + fmt((M.d || 0) * 1000, 0) + ' mm');
+      facts.push('ρ = <b>' + fmt(M.rho, 0) + '</b> kg/m³');
+      if (M.lam !== undefined) { const r60 = 0.06 / M.lam;
+        facts.push(t('What 60 mm buy:') + ' ' + (r60 < 0.01 ? 'R < 0.01' : 'R <b>' + fmt(r60, 2) + '</b>') + ' (m²·°C)/W'); }
+      d.appendChild(el('div', { class:'limitrow' }, facts.map(f => el('span', { html:f }))));
+      d.appendChild(el('p', { class:'costlink', text:thermalCharacter(M, lam) }));
+      const og = MAT_ORIGIN[sel];
+      if (og) d.appendChild(el('p', { class:'costlink',
+        html:'<b>' + t('Traditional provenance:') + '</b> ' + (LANG === 'pt' ? og[1] : og[0]) }));
+      const used = defaultsUsing(sel);
+      d.appendChild(el('p', { class:'costlink', html:'<b>' + t('Used by default in:') + '</b> ' +
+        (used.length ? used.map(k => (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k]).join(' · ')
+                     : t('Not in the default build-ups.')) }));
+      frag.appendChild(d);
+    }
+  });
+
+  host.appendChild(section(t('The library as a table'),
+    t('Conductivity, density and kind of all thirty-three materials'),
+    'materiais-biblioteca', () => csvRows(
+      [[t('Material'), t('Family'), 'λ (W/m·°C)', 'R (m²·°C/W)', 'ρ (kg/m³)']]
+      .concat(MATERIALS.map(m => [t(m.name), t(m.group),
+        m.lam !== undefined ? +m.lam.toFixed(3) : '',
+        m.r !== undefined ? +m.r.toFixed(2) : '',
+        m.rho])))));
+  host.appendChild(el('p', { class:'costlink', html:t('Look up complete systems and their prices:') + ' ' +
+    [['F · Fachadas', GDP_BASE + '/Fachadas__divisoes_e_proteccoes.html'],
+     ['Q · Coberturas', GDP_BASE + '/Coberturas.html'],
+     ['L · Vãos', GDP_BASE + '/Vaos.html'],
+     ['N · Isolamentos', GDP_BASE + '/Isolamentos_e_impermeabilizacoes.html'],
+     ['R · Revestimentos', GDP_BASE + '/Revestimentos.html']]
+    .map(([lab, url]) => '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + lab + '</a>').join(' · ') +
+    ' — Gerador de Preços, CYPE.' }));
+}
+
 const TABS = [
-  { key:'climate',   label:'Climate',        build:buildClimate },
+  { key:'materials', label:'Materials',      build:buildMaterials },
   { key:'roofs',     label:'Roofs',          build:buildRoofs },
   { key:'floors',    label:'Floors',         build:buildFloorsPavements },
   { key:'wallsext',  label:'External walls', build:buildWallsExt },
@@ -5399,10 +5544,6 @@ TABS.forEach(tab => {
       host.appendChild(el('p', { class:'costlink', html:t('Ducts, grilles and ventilation equipment are budgeted under')
         + ' <a href="' + GDP_BASE + '/Instalacoes.html" target="_blank" rel="noopener noreferrer">I · Instalações</a>'
         + ' ' + t('— Gerador de Preços, CYPE. Teaching rule: the minimum flow rate (R<sub>ph</sub>) is a health requirement; its cost belongs in the budget like any other unit of work.') }));
-    }
-    if (tab.key === 'climate') {
-      host.appendChild(hint('clima-orcamento',
-        'Climate sets the requirement (I1–I3, V1–V3), the requirement sets the thickness — and the thickness sets the cost. As you work through the tabs, each solution that meets the limit asks for area and unit price; the overall budget accumulates in the <b>Cost and quantities</b> panels.'));
     }
   };
 });
@@ -5725,8 +5866,8 @@ function mountApp(site, keepTab) {
   });
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
-  const wanted = keepTab === 'pavements' ? 'floors' : keepTab;
-  activate(TABS.some(x => x.key === wanted) ? wanted : 'climate');
+  const wanted = keepTab === 'pavements' ? 'floors' : keepTab === 'climate' ? 'materials' : keepTab;
+  activate(TABS.some(x => x.key === wanted) ? wanted : 'materials');
 
   function activate(key) {
     STATE.tab = key;
@@ -5809,7 +5950,7 @@ initSetup();
 Object.assign(STATIC_PT, {
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
-  setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, percorrendo depois a envolvente elemento a elemento — coberturas, pavimentos, paredes, vãos e sombreamento — perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
+  setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, abrindo depois um mosaico de materiais — naturais e industrializados, próprios da região — antes de percorrer a envolvente elemento a elemento perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
   fldConc: 'Concelho',
   fldConcSub: 'Escreva o nome do concelho. É a única entrada que fixa a região: a NUTS III decorre dele e não se define à mão.',
   fldNuts: 'Região NUTS III',
@@ -6755,6 +6896,30 @@ Object.assign(PT, {
   'Uma <b>unidade de obra</b> no Gerador de Preços é um sistema completo ao m² — materiais, mão-de-obra, meios auxiliares e custos indirectos já incluídos no preço composto. É por isso que este painel pede <b>área × preço unitário</b> e não o preço de cada camada: compare aqui soluções que cumpram o mesmo U e leia, lado a lado, o que cada grau de exigência térmica custa. Sem preço unitário não há total — o travessão é intencional.'; });
 PT_HINT['clima-orcamento'] =
   'O clima fixa a exigência (I1–I3, V1–V3) e a exigência fixa a espessura — e a espessura fixa o custo. Ao percorrer os separadores, cada solução que cumprir o limite pede área e preço unitário; o orçamento global vai-se somando nos painéis de <b>Custo e quantidades</b>.';
+
+
+/* v2.1.0: English–Portuguese for the material mosaic. */
+Object.assign(PT, {
+  'Materials': 'Materiais',
+  'Availability before solutions: what the area builds with, natural and industrial, before any of it is asked to meet a limit.': 'Disponibilidade antes das soluções: os materiais da região, naturais e industriais, antes de qualquer deles ter de cumprir um limite.',
+  'Material mosaic': 'Mosaico de materiais',
+  'All materials': 'Todos os materiais',
+  'In the library': 'Na biblioteca',
+  'What 60 mm buy:': 'O que compram 60 mm:',
+  'Traditional provenance:': 'Proveniência tradicional:',
+  'Used by default in:': 'Por defeito em:',
+  'Not in the default build-ups.': 'Em nenhuma constituição por defeito.',
+  'The library as a table': 'A biblioteca em tabela',
+  'Conductivity, density and kind of all thirty-three materials': 'Condutibilidade, massa volúmica e origem dos trinta e três materiais',
+  'Material': 'Material',
+  'Look up complete systems and their prices:': 'Consultar sistemas completos e preços:',
+  'Insulation: buys resistance with almost no mass — this is what closes the gap to the limit.': 'Isolamento: compra resistência quase sem massa — é isto que fecha a diferença até ao limite.',
+  'Heavy and conductive: thermal mass with hardly any resistance — never the layer that meets the limit.': 'Pesado e condutor: massa térmica quase sem resistência — nunca a camada que cumpre o limite.',
+  'A natural insulator among heavier materials — useful, but not a substitute for insulation where the zone demands it.': 'Um isolante natural entre materiais mais pesados — útil, mas não substitui o isolamento onde a zona o exige.',
+  'In between: slows heat far more than stone or concrete, insulates far less than a true insulation.': 'No meio: retarda o calor muito mais que a pedra ou o betão, isola muito menos que um verdadeiro isolamento.'
+});
+PT_HINT['mat-zone'] =
+  'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b> e uma parede <b>%3 W/(m²·°C)</b>. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
 
 /* PT v2.0.0: the boot above ran before this dictionary existed, so static
    markup ([data-t]) is re-applied now that every STATIC_PT entry is filled.

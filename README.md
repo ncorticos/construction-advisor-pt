@@ -4,7 +4,7 @@ An envelope designer for the Portuguese building thermal regulation (SCE) — Po
 
 **[Open the app](https://ncorticos.github.io/construction-advisor-pt/)**
 
-A site is reduced to two things — a NUTS III region and an altitude — exactly as the regulation itself does, and every reference parameter is corrected from there. The app then works through the envelope element by element (climate, roofs, floors, walls, windows, shading, indoor air quality), reporting the limit in force for each and letting a student build an assembly layer by layer to see where it lands.
+A site is reduced to two things — a NUTS III region and an altitude — exactly as the regulation itself does, and every reference parameter is corrected from there. The app then works through a mosaic of materials first — natural and industrialized — and then through the envelope element by element (roofs, floors, walls, windows, shading, indoor air quality), reporting the limit in force for each and letting a student build an assembly layer by layer to see where it lands.
 
 Every envelope solution also carries quantities and a cost: the student enters the area and the unit price read from the Gerador de Preços, and the app totals each element and the overall budget — with CSV export — so the thermal choice is always read together with what it costs.
 
