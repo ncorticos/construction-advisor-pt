@@ -4,7 +4,7 @@ An envelope designer for the Portuguese building thermal regulation (SCE) — Po
 
 **[Open the app](https://ncorticos.github.io/construction-advisor-pt/)**
 
-A site is reduced to two things — a NUTS III region and an altitude — exactly as the regulation itself does, and every reference parameter is corrected from there. The app then works through a mosaic of materials first — natural and industrialized — and then through the envelope element by element (roofs, floors, walls, windows, shading, indoor air quality), reporting the limit in force for each and letting a student build an assembly layer by layer to see where it lands.
+A site is reduced to two things — a NUTS III region and an altitude — exactly as the regulation itself does, and every reference parameter is corrected from there. The app opens with a mosaic of materials first — natural and industrialized, each with a photograph, its thermal character, its traditional provenance, and where in Portugal (mainland regions, Madeira, Azores) it is traditionally rooted — and then works through the envelope element by element (roofs, floors, walls, windows, shading, indoor air quality), reporting the limit in force for each and letting a student build an assembly layer by layer to see where it lands.
 
 Every envelope solution also carries quantities and a cost: the student enters the area and the unit price read from the Gerador de Preços, and the app totals each element and the overall budget — with CSV export — so the thermal choice is always read together with what it costs.
 
@@ -20,6 +20,10 @@ Every figure the app reports names the table or equation it comes from. The regu
 - [`sources/Manual-SCE-v1.pdf`](sources/Manual-SCE-v1.pdf) — Manual SCE, the technical manual approved by Despacho n.º 6476-H/2021 (the calculation methodology behind every equation the app uses)
 
 The current, official versions of all SCE legislation — consolidated and kept up to date by the regulator — are always at **[sce.pt/legislacao](https://www.sce.pt/legislacao/)**. Check there if a figure in the app ever looks like it might be out of date.
+
+### Photographs
+
+The thirty-three material photographs are embedded from [Wikimedia Commons](https://commons.wikimedia.org/), each under its own free licence (CC BY, CC BY-SA, CC0 or public domain). Author, licence and file page ride with every material inside the app's detail panel — the credits live where the images are seen.
 
 ### Other sources cited
 
