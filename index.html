@@ -609,7 +609,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.3.1',
+  version:     '2.3.2',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5490,6 +5490,25 @@ const siteZone = () => (STATE.site && SITE_ZONE_OF[STATE.site.nuts])
   || (STATE.zone && STATE.zone.region === 'madeira' ? 'Madeira'
     : STATE.zone && STATE.zone.region === 'acores' ? 'Açores' : null);
 const inZone = (key, z) => !z || (MAT_ZONE[key] || []).includes('Nationwide') || (MAT_ZONE[key] || []).includes(z);
+/* Verified Portuguese producers, researched Oct 2026 — real companies with
+   real websites, shown as labeled examples (never exhaustive, no endorsement).
+   No logos: trademarks cannot be embedded. Validate before specifying. */
+const MAT_PRODUCERS = {
+  icb:[{ n:'Amorim Cork Insulation', u:'https://www.amorimcorkinsulation.com/en', l:'Vendas Novas, Alentejo' }],
+  pedrag:[{ n:'Marmores Freitas', u:'https://marmoresfreitas.pt', l:'Fafe' },
+          { n:'Granicavez', u:'https://granicavez.pt', l:'' }],
+  pedrac:[{ n:'Stone PT — Portuguese stone portal', u:'https://stone-pt.com/en/', l:'' }],
+  pedran:[{ n:'AGF Mármores', u:'https://agf-marmores.pt/en', l:'Vila Viçosa' },
+          { n:'Marmoz', u:'https://marmoz.com/en', l:'Estremoz' }],
+  pedrab:[{ n:'Marques Britas', u:'https://marquesbritas.pt/en/about-us', l:'Ribeira Grande, Açores' }],
+  seixo:[{ n:'Marques Britas', u:'https://marquesbritas.pt/en/about-us', l:'Ribeira Grande, Açores' }],
+  madeirae:[{ n:'Pedrosa e Irmãos', u:'https://pedrosairmaos.com/en', l:'Leiria' },
+            { n:'Madeifatima', u:'https://www.madeifatima.com/pt', l:'' }],
+  madeirad:[{ n:'Pedrosa e Irmãos', u:'https://pedrosairmaos.com/en', l:'Leiria' },
+            { n:'Madeifatima', u:'https://www.madeifatima.com/pt', l:'' }],
+  soalho:[{ n:'Pedrosa e Irmãos', u:'https://pedrosairmaos.com/en', l:'Leiria' },
+           { n:'Madeifatima', u:'https://www.madeifatima.com/pt', l:'' }]
+};
 const MAT_KIND = {};
 ['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom']
   .forEach(k => MAT_KIND[k] = 'natural');
@@ -5617,6 +5636,12 @@ function buildMaterials(host) {
       const og = MAT_ORIGIN[sel];
       if (og) d.appendChild(el('p', { class:'costlink',
         html:'<b>' + t('Traditional provenance:') + '</b> ' + (LANG === 'pt' ? og[1] : og[0]) }));
+      const prod = MAT_PRODUCERS[sel];
+      if (prod && prod.length) d.appendChild(el('p', { class:'costlink',
+        html:'<b>' + t('Portuguese producers (examples):') + '</b> ' +
+        prod.map(p => '<a href="' + p.u + '" target="_blank" rel="noopener noreferrer">' + p.n + '</a>'
+          + (p.l ? ' (' + p.l + ')' : '')).join(' · ') +
+        ' — ' + t('validate with local dealers before specifying.') }));
       const used = defaultsUsing(sel);
       d.appendChild(el('p', { class:'costlink', html:'<b>' + t('Used by default in:') + '</b> ' +
         (used.length ? used.map(k => (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k]).join(' · ')
@@ -7064,7 +7089,9 @@ Object.assign(PT, {
   'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.': 'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.',
   'Systems and producers:': 'Sistemas e produtores:',
   'Manufacturers index at the Gerador de Preços': 'Índice de fabricantes do Gerador de Preços',
-  'confirm dealers near the site.': 'confirmar distribuidores junto ao local.'
+  'confirm dealers near the site.': 'confirmar distribuidores junto ao local.',
+  'Portuguese producers (examples):': 'Produtores portugueses (exemplos):',
+  'validate with local dealers before specifying.': 'validar com distribuidores locais antes de especificar.'
 });
 PT_HINT['mat-photos'] =
   'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.';
