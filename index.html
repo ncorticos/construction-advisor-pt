@@ -609,7 +609,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.4.0',
+  version:     '2.4.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5572,33 +5572,24 @@ function buildMaterials(host) {
     'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.'));
   const box = el('div');
   host.appendChild(box);
-  let filter = 'all', region = 'all', sel = null;
+  let filter = 'all', sel = null;
   rebuildable(box, (frag, rerender) => {
-    const sz = siteZone(), eff = region === 'all' ? sz : region;
+    const eff = siteZone();
     frag.appendChild(el('div', { class:'limitrow' }, [
-      el('span', { html:'<b>' + t('Your site sits in:') + '</b> ' + (sz || '—') }),
-      region !== 'all' ? el('span', { html:'<b>' + t('Showing:') + '</b> ' + region }) : null,
+      el('span', { html:'<b>' + t('Your site sits in:') + '</b> ' + (eff || '—') }),
       el('span', { html:'<span style="color:var(--muted)">' + t('Bright: rooted in the shown area; dimmed: travels further.') + '</span>' })
     ]));
-    const mbar = el('div', { class:'mosaicbar' });
     const bar = el('div', { class:'seg', role:'group', 'aria-label':t('Material mosaic') });
     [['all', t('All materials')], ['natural', 'Natural'], ['industrial', 'Industrial']]
       .forEach(([v, lab]) => bar.appendChild(el('button',
         { text:lab, 'aria-pressed': v === filter ? 'true' : 'false', onclick:() => { filter = v; rerender(); } })));
-    mbar.appendChild(el('div', null, [ el('label', { text:t('Kind') }), bar ]));
-    const rsel = el('select', { onchange:e => { region = e.target.value; rerender(); } });
-    rsel.appendChild(el('option', { value:'all', text:t('All regions') }));
-    ZONES5.forEach(z => rsel.appendChild(el('option', { value:z, text:z, selected: region === z ? '' : null })));
-    mbar.appendChild(el('div', null, [ el('label', { text:t('Region') }), rsel ]));
-    frag.appendChild(mbar);
+    frag.appendChild(bar);
     const grid = el('div', { class:'mosaic' });
-    const eff2 = region === 'all' ? siteZone() : region;
     MATERIALS.filter(m => filter === 'all' || MAT_KIND[m.key] === filter)
-      .filter(m => region === 'all' || (MAT_ZONE[m.key] || []).includes('Nationwide') || (MAT_ZONE[m.key] || []).includes(region))
       .forEach(m => {
       const sub = (m.r !== undefined ? 'R ' + fmt(m.r, 2) : 'λ ' + fmt(m.lam, 3))
         + ' · ' + (MAT_KIND[m.key] === 'natural' ? 'Natural' : 'Industrial');
-      const card = el('button', { class:'mcard' + (sel === m.key ? ' sel' : '') + (inZone(m.key, eff2) ? '' : ' dim'),
+      const card = el('button', { class:'mcard' + (sel === m.key ? ' sel' : '') + (inZone(m.key, eff) ? '' : ' dim'),
         onclick:(e) => { sel = (sel === m.key ? null : m.key); rerender();
           if (e && e.target && e.target.classList && e.target.classList.contains('mphoto')) openLightbox(m.key); } });
       const ph = MAT_PHOTO[m.key];
@@ -5728,28 +5719,20 @@ function buildSuppliers(host) {
     'Who sells what, where: companies and their products for the shown region — verified examples, never exhaustive.');
   const box = el('div');
   host.appendChild(box);
-  let region = 'auto';
   rebuildable(box, (frag, rerender) => {
-    const sz = siteZone(), eff = region === 'auto' ? sz : region;
+    const eff = siteZone();
     const list = SUPPLIERS.filter(s => !eff || s.r === eff);
     const covered = {};
     list.forEach(s => s.mats.forEach(k => covered[k] = 1));
     const missing = MATERIALS.filter(m => !covered[m.key]);
     frag.appendChild(stats([
-      statCard(t('Region'), eff || '—', null, region === 'auto' ? t('Follows the site') : t('Chosen by hand')),
+      statCard(t('Region'), eff || '—', null, t('Follows the site')),
       statCard(t('Companies'), String(list.length), null, t('Verified entries')),
       statCard(t('Materials covered'), Object.keys(covered).length + ' / 33', null, t('Of the library'))
     ]));
     frag.appendChild(hint('sup-dir',
       'A directory, not a marketplace: every entry below was verified — producers make, distributors stock. Anything without a verified entry is listed at the foot as missing instead of being invented. Confirm dealers near the site before specifying.'));
-    const mbar = el('div', { class:'mosaicbar' });
-    const rsel = el('select', { onchange:e => { region = e.target.value; rerender(); } });
-    rsel.appendChild(el('option', { value:'auto',
-      text:t('Site region') + (sz ? ' (' + sz + ')' : '') }));
-    ZONES5.forEach(z => rsel.appendChild(el('option', { value:z, text:z,
-      selected: region === z ? '' : null })));
-    mbar.appendChild(el('div', null, [ el('label', { text:t('Region') }), rsel ]));
-    frag.appendChild(mbar);
+
     list.forEach(s => {
       const card = el('div', { class:'costbox' });
       card.appendChild(el('div', { class:'limitrow' }, [
@@ -5768,7 +5751,7 @@ function buildSuppliers(host) {
       t('Company, region, products and websites for every entry'),
       'fornecedores-diretorio', () => csvRows(
         [[t('Company'), t('Region'), t('Products'), t('Website')]]
-        .concat(SUPPLIERS.map(s => [s.n, s.r,
+        .concat(list.map(s => [s.n, s.r,
           s.mats.map(k => t((MAT[k] || {}).name || k)).join(' · '), s.u])))));
   });
 }
