@@ -592,7 +592,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.5.0',
+  version:     '2.6.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5446,7 +5446,8 @@ const inZone = (key, z) => !z || (MAT_ZONE[key] || []).includes('Nationwide') ||
    real websites, shown as labeled examples (never exhaustive, no endorsement).
    No logos: trademarks cannot be embedded. Validate before specifying. */
 const MAT_PRODUCERS = {
-  icb:[{ n:'Amorim Cork Insulation', u:'https://www.amorimcorkinsulation.com/en', l:'Vendas Novas, Alentejo' }],
+  icb:[{ n:'Amorim Cork Insulation', u:'https://www.amorimcorkinsulation.com/en', l:'Vendas Novas, Alentejo' },
+      { n:'Sofalca', u:'https://www.sofalca.pt/pt', l:'Bemposta, Abrantes' }],
   pedrag:[{ n:'Marmores Freitas', u:'https://marmoresfreitas.pt', l:'Fafe' },
           { n:'Granicavez', u:'https://granicavez.pt', l:'' }],
   pedrac:[{ n:'Stone PT — Portuguese stone portal', u:'https://stone-pt.com/en/', l:'' }],
@@ -5627,7 +5628,20 @@ function buildMaterials(host) {
    Text links only (logos are trademarked); entries researched Oct 2026.
    Anything without a verified entry is listed as missing instead of
    being invented. Region follows the site until another is picked.
+   v2.6.0: ~50 verified entries across Norte/Centro/Sul/Madeira/Açores,
+   producers and housing-scale distributors. Five products outside the
+   33-material library (roof tiles, windows, doors, sanitary, paint) get
+   bilingual labels below; coverage still counts library materials only.
    ================================================================ */
+const SUP_MAT = {
+  telha:['Clay roof tile','Telha cerâmica'],
+  janela:['Efficient window','Janela eficiente'],
+  porta:['Interior door','Porta interior'],
+  sanitario:['Sanitary ware','Louça sanitária'],
+  tinta:['Paint','Tinta']
+};
+const supMatName = k => MAT[k] ? t(MAT[k].name)
+  : (LANG === 'pt' ? ((SUP_MAT[k] || [])[1] || k) : ((SUP_MAT[k] || [])[0] || k));
 const SUPPLIERS = [
   { n:'Preceram', u:'https://preceram.pt/', l:'Pombal', r:'Centro', k:'producer',
     mats:['tijolo11','tijolo15','tijolo22','tijolom'] },
@@ -5665,7 +5679,75 @@ const SUPPLIERS = [
     mats:['pedrab','seixo','betao','madeirae'] },
   { n:'Soluções M', u:'https://marquesbritas.pt/en/sector', l:'Açores', r:'Açores', k:'distributor', mats:['aco'] },
   { n:'Tecnovia Açores', u:'https://tecnovia.pt/', l:'Graciosa', r:'Açores', k:'producer',
-    mats:['seixo','betao','betonilha'] }
+    mats:['seixo','betao','betonilha'] },
+  { n:'CIN', u:'https://cin.com/', l:'Maia', r:'Norte', k:'producer', mats:['tinta'],
+    d:['Iberian market leader in paints and varnishes — sold by the can for one house or a whole block.',
+       'Líder ibérico em tintas e vernizes — à lata para uma moradia ou para um quarteirão.'] },
+  { n:'Vicaima', u:'https://www.vicaima.com/', l:'Vale de Cambra', r:'Norte', k:'producer', mats:['porta'],
+    d:['Interior, acoustic and fire doors via dealers — one leaf or a full housing schedule.',
+       'Portas interiores, acústicas e corta-fogo via revendedores — uma folha ou o mapa completo.'] },
+  { n:'Caixiave', u:'https://www.caixiave.pt/', l:'', r:'Norte', k:'producer', mats:['janela'],
+    d:['Efficient PVC and aluminium windows, made and fitted — quotes for private homes.',
+       'Janelas eficientes de PVC e alumínio, fabricadas e instaladas — orçamentos para particulares.'] },
+  { n:'Betão Liz', u:'https://www.cimpor.com/en/betao', l:'Famalicão', r:'Norte', k:'producer',
+    mats:['betao','betonilha'],
+    d:['38 ready-mix plants from Minho to the Algarve — order by the mixer, with pumping.',
+       '38 centrais do Minho ao Algarve — peça por autobetoneira, com bombagem.'] },
+  { n:'Secil', u:'https://www.secil.pt/', l:'Braga', r:'Norte', k:'producer',
+    mats:['betao','betonilha','reboco','seixo'] },
+  { n:'Cimpor', u:'https://www.cimpor.com/', l:'Maia', r:'Norte', k:'producer', mats:['reboco','betonilha'],
+    d:['Dry-mortar plant — renders and screeds by the bag or the silo.',
+       'Fábrica de argamassas secas — rebocos e betonilhas ao saco ou ao silo.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Braga', r:'Norte', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Umbelino Monteiro', u:'https://www.umbelino.pt/', l:'Meirinhas, Pombal', r:'Centro', k:'producer',
+    mats:['telha'],
+    d:['Ceramic roof tiles with up to a 50-year warranty — the default moradia roof.',
+       'Telhas cerâmicas com garantia até 50 anos — a cobertura por defeito da moradia.'] },
+  { n:'Sofalca', u:'https://www.sofalca.pt/pt', l:'Bemposta, Abrantes', r:'Centro', k:'producer', mats:['icb'],
+    d:['Expanded black cork next door to the site — ETICS, ventilated façades, screeds.',
+       'Cortiça expandida ao lado da obra — ETICS, fachadas ventiladas, betonilhas.'] },
+  { n:'Sanitana', u:'https://www.sanitana.com/', l:'Anadia', r:'Centro', k:'producer', mats:['sanitario'],
+    d:['Full bathrooms — ware, taps, trays and furniture — since 1979.',
+       'Casas de banho completas — louças, torneiras, bases e mobiliário — desde 1979.'] },
+  { n:'Revigrés', u:'https://www.revigres.pt/', l:'Barrô, Águeda', r:'Centro', k:'producer', mats:['ceramico'],
+    d:['Porcelain wall and floor tiles — order through local dealers.',
+       'Pavimentos e revestimentos em grés porcelânico — via revendedores locais.'] },
+  { n:'Pavigrés', u:'https://pavigres.com/', l:'', r:'Centro', k:'producer', mats:['ceramico'],
+    d:['Ceramic wall and floor tiles — confirm dealers near the site.',
+       'Pavimentos e revestimentos cerâmicos — confirmar revendedores junto à obra.'] },
+  { n:'Artebel', u:'https://www.artebel.pt/', l:'', r:'Centro', k:'producer',
+    mats:['blococ','blocol','lajealig','lajealig27'],
+    d:['Thermal blocks and Fungibloco slab lightening — datasheets cite housing slabs.',
+       'Blocos térmicos e aligeiramento Fungibloco — fichas citam lajes de habitação.'] },
+  { n:'Cimpor', u:'https://www.cimpor.com/', l:'Souselas', r:'Centro', k:'producer',
+    mats:['betao','reboco','betonilha'] },
+  { n:'D&S Caixilharia', u:'https://dsjanelaspvc.pt/janelas-pvc-aveiro', l:'Aveiro', r:'Centro', k:'distributor',
+    mats:['janela'],
+    d:['Local PVC and aluminium fabricator-installer — the last mile the factories do not do.',
+       'Serralharia local de PVC e alumínio — o último quilómetro que as fábricas não fazem.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Abrantes', r:'Centro', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Aveiro', r:'Centro', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Caldas da Rainha', r:'Centro', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Castelo Branco', r:'Centro', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Cimpor', u:'https://www.cimpor.com/', l:'Alhandra', r:'Sul', k:'producer',
+    mats:['betao','reboco','betonilha'] },
+  { n:'Cimpor', u:'https://www.cimpor.com/', l:'Loulé', r:'Sul', k:'producer',
+    mats:['betao','reboco','betonilha'] },
+  { n:'Betão Liz', u:'https://www.cimpor.com/en/betao', l:'Lisboa', r:'Sul', k:'producer',
+    mats:['betao','betonilha'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Alverca', r:'Sul', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Leroy Merlin', u:'https://leroymerlin.pt/', l:'Sintra', r:'Sul', k:'distributor',
+    mats:['gesso','ceramico','soalho','mw','eps','xps','pur','imperm','reboco','betonilha'],
+    d:['DIY retail nationwide — finishes, insulation and kitchens off the shelf.',
+       'Retalho bricolage em todo o país — acabamentos, isolamento e cozinhas de prateleira.'] },
+  { n:'Obramat', u:'https://www.obramat.pt/', l:'Alfragide', r:'Sul', k:'distributor',
+    mats:['blococ','blocol','gesso','ceramico','soalho','imperm','reboco','betonilha','mw','eps'],
+    d:['Adeo pro warehouse — 20 000 lines for contractors, same group as Leroy Merlin.',
+       'Armazém pro da Adeo — 20 000 referências para profissionais, do grupo Leroy Merlin.'] },
+  { n:'Tecnovia', u:'https://tecnovia.pt/', l:'Madeira', r:'Madeira', k:'producer',
+    mats:['seixo','betao','betonilha'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Cancela, Madeira', r:'Madeira', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] },
+  { n:'Maxmat', u:'https://www.maxmat.pt/', l:'Açores', r:'Açores', k:'distributor', mats:['blococ','tijolo11','tijolo15','reboco','gesso','ceramico','betonilha','imperm','madeirae','soalho'], d:['34 stores across the mainland, Madeira and the Azores — from one bag to SME sites.','34 lojas no continente, Madeira e Açores — de um saco a obras de PME.'] }
 ];
 const KIND_LABEL = { producer:'Producer', distributor:'Distributor', portal:'Portal' };
 function buildSuppliers(host) {
@@ -5678,7 +5760,7 @@ function buildSuppliers(host) {
     const eff = siteZone();
     const list = SUPPLIERS.filter(s => !eff || s.r === eff);
     const covered = {};
-    list.forEach(s => s.mats.forEach(k => covered[k] = 1));
+    list.forEach(s => s.mats.forEach(k => { if (MAT[k]) covered[k] = 1; }));
     const missing = MATERIALS.filter(m => !covered[m.key]);
     frag.appendChild(stats([
       statCard(t('Region'), eff || '—', null, t('Follows the site')),
@@ -5695,7 +5777,7 @@ function buildSuppliers(host) {
         el('span', { text:(s.l ? s.l + ' · ' : '') + t(KIND_LABEL[s.k] || s.k) })
       ]));
       card.appendChild(el('div', { style:'margin:6px 0 2px' },
-        s.mats.map(k => el('span', { class:'zonepill', text:t((MAT[k] || {}).name || k) }))));
+        s.mats.map(k => el('span', { class:'zonepill', text:supMatName(k) }))));
       if (s.d) card.appendChild(el('p', { class:'costlink', text:(LANG === 'pt' ? s.d[1] : s.d[0]) }));
       frag.appendChild(card);
     });
@@ -5707,7 +5789,7 @@ function buildSuppliers(host) {
       'fornecedores-diretorio', () => csvRows(
         [[t('Company'), t('Region'), t('Products'), t('Website')]]
         .concat(list.map(s => [s.n, s.r,
-          s.mats.map(k => t((MAT[k] || {}).name || k)).join(' · '), s.u])))));
+          s.mats.map(k => supMatName(k)).join(' · '), s.u])))));
   });
 }
 
