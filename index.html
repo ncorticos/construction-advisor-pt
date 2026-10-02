@@ -427,6 +427,19 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photoedit-msg{font-size:12px; color:var(--muted); margin:6px 0 0; min-height:1em}
 .photoedit-msg.bad{color:var(--c2)}
 .mcard.edited .mphoto{outline:2px solid var(--c1); outline-offset:-2px}
+.mcard{position:relative}
+.mcell{position:relative; display:flex}
+.mcell>.mcard{flex:1; padding-bottom:40px}
+.mupload{position:absolute; left:12px; right:12px; bottom:10px; font:inherit; font-size:11.5px; padding:5px 8px;
+  border:1px solid var(--c1); color:var(--c1); background:#fff; border-radius:6px; cursor:pointer}
+.mupload:hover{background:var(--c1); color:#fff}
+.photobar-sep{flex:1}
+.btn.quiet{border-color:transparent; color:var(--muted); font-size:11.5px}
+.mcard.dropon{border-color:var(--c1); box-shadow:0 0 0 2px var(--c1)}
+.mcard.dropon::after,.mcard.busy::after{content:attr(data-drop); position:absolute; left:10px; right:10px; top:10px; height:110px;
+  display:flex; align-items:center; justify-content:center; text-align:center; padding:8px; border-radius:6px;
+  background:rgba(37,99,235,.82); color:#fff; font-size:12px; font-weight:600; pointer-events:none}
+.mcard.busy::after{content:'…'; font-size:20px}
 .zonepill{display:inline-block; font-family:var(--mono); font-size:10.5px; border:1px solid var(--line);
   border-radius:20px; padding:1px 9px; margin:1px 4px 1px 0; color:var(--ink2); background:var(--wash)}
 .mcard .mname{font-size:12.5px; font-weight:600; line-height:1.35}
@@ -610,7 +623,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.7.0',
+  version:     '2.8.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5508,8 +5521,10 @@ function readFileAsDataURL(f) {
   return new Promise((ok, no) => { const r = new FileReader();
     r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(f); });
 }
+const PHOTO_ACCEPT = 'image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp';
+const isImageFile = f => f && (/^image\//.test(f.type) || (!f.type && /\.(jpe?g|png|webp)$/i.test(f.name)));
 async function photoFromFile(f) {
-  if (!f || !/^image\//.test(f.type)) throw new Error(t('That file is not an image.'));
+  if (!isImageFile(f)) throw new Error(t('That file is not an image.'));
   return bakeTile(await loadImage(await readFileAsDataURL(f), false));
 }
 /**
@@ -5526,6 +5541,98 @@ async function photoFromUrl(u) {
   try { return { img: bakeTile(await loadImage(src, true)), linked: false }; } catch (e) {}
   try { await loadImage(src, false); return { img: src, linked: true }; }
   catch (e) { throw new Error(t('That link did not open as an image. On the website, right-click the picture and choose “Copy image address”, then paste that.')); }
+}
+/**
+ * What a browser hands over when a picture is dragged in from another tab:
+ * sometimes a file, usually the dragged <img> as HTML plus the link around it.
+ * Candidates are tried full size first — the image a search result points to
+ * (imgurl=, mediaurl=), the largest srcset entry, the <img> src — then the link.
+ * The page is kept as the source when it differs from the image itself.
+ */
+function dropCandidates(dt) {
+  const out = [], add = u => { u = (u || '').trim(); if (u && out.indexOf(u) < 0) out.push(u); };
+  const links = (dt.getData('text/uri-list') || '').split(/\r?\n/).filter(l => l && l[0] !== '#');
+  const plain = (dt.getData('text/plain') || '').trim();
+  const base = links[0] || location.href;
+  const abs = u => { try { return new URL(u, base).href; } catch (e) { return ''; } };
+  let page = '';
+  [links[0], plain].forEach(u => { try {
+    const q = new URL(u).searchParams; add(q.get('imgurl') || q.get('mediaurl') || '');
+    page = page || q.get('imgrefurl') || q.get('pageurl') || '';
+  } catch (e) {} });
+  const html = dt.getData('text/html');
+  if (html) {
+    const im = new DOMParser().parseFromString(html, 'text/html').querySelector('img');
+    if (im) {
+      const set = (im.getAttribute('srcset') || '').split(',').map(x => x.trim().split(/\s+/))
+        .filter(x => x[0]).sort((a, b) => (parseFloat(b[1]) || 1) - (parseFloat(a[1]) || 1));
+      if (set.length) add(abs(set[0][0]));
+      add(/^data:image\//.test(im.getAttribute('src') || '') ? im.getAttribute('src') : abs(im.getAttribute('src')));
+    }
+  }
+  links.forEach(add);
+  if (/^(https?:|data:image\/)/.test(plain)) add(plain);
+  return { list: out.filter(u => /^(https?:|data:image\/)/i.test(u)), page: safeHref(page || links[0] || plain) };
+}
+async function photoFromDrop(dt) {
+  const f = dt.files && Array.from(dt.files).find(isImageFile);
+  if (f) return { img: await photoFromFile(f), linked: false, page: '' };
+  const c = dropCandidates(dt);
+  if (!c.list.length) throw new Error(t('Nothing usable was dropped — drag the picture itself, or save it and drop the file.'));
+  let linkedHit = null;
+  for (const u of c.list) {
+    if (/^data:image\//i.test(u)) { try { return { img: bakeTile(await loadImage(u, false)), linked: false, page: c.page }; } catch (e) { continue; } }
+    const src = directImageUrl(u);
+    try { return { img: bakeTile(await loadImage(src, true)), linked: false, page: c.page || u }; } catch (e) {}
+    if (!linkedHit) try { await loadImage(src, false); linkedHit = { img: src, linked: true, page: c.page || u }; } catch (e) {}
+  }
+  if (linkedHit) return linkedHit;
+  throw new Error(t('That picture could not be read. Save it to your computer and drop the file instead.'));
+}
+/* A drag that starts inside the page (a mosaic photo) is not an import. */
+let PHOTO_DRAG_INTERNAL = false;
+document.addEventListener('dragstart', () => { PHOTO_DRAG_INTERNAL = true; });
+document.addEventListener('dragend', () => { PHOTO_DRAG_INTERNAL = false; });
+/* A picture dropped beside a target must not replace the app in the tab. */
+const isTextField = n => n && (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.isContentEditable);
+window.addEventListener('dragover', e => { if (!isTextField(e.target)) e.preventDefault(); });
+window.addEventListener('drop', e => { if (!isTextField(e.target)) e.preventDefault(); });
+/** One photograph for one material, picked from disk without opening its panel. */
+function pickPhotoFor(key, done) {
+  const inp = el('input', { type:'file', accept:PHOTO_ACCEPT, style:'display:none' });
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; inp.remove(); if (!f) return;
+    try {
+      const img = await photoFromFile(f), prev = PHOTO_EDITS[key] || {};
+      if (setPhoto(key, { img, author:prev.author || '', lic:prev.lic || '', url:prev.url || '', linked:false })) {
+        toast('Photo replaced — add author and licence below.'); done();
+      }
+    } catch (e) { toast(e.message); }
+  });
+  document.body.appendChild(inp); inp.click();
+}
+/** Any mosaic card takes a dropped picture for its own material. */
+function cardDropTarget(card, key, done) {
+  const on = e => { if (PHOTO_DRAG_INTERNAL) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; card.classList.add('dropon'); };
+  card.addEventListener('dragenter', on);
+  card.addEventListener('dragover', on);
+  card.addEventListener('dragleave', e => { if (!card.contains(e.relatedTarget)) card.classList.remove('dropon'); });
+  card.addEventListener('drop', async e => {
+    card.classList.remove('dropon');
+    if (PHOTO_DRAG_INTERNAL) return;
+    e.preventDefault(); e.stopPropagation();
+    card.classList.add('busy');
+    try {
+      const r = await photoFromDrop(e.dataTransfer);
+      const prev = PHOTO_EDITS[key] || {};
+      if (!setPhoto(key, { img:r.img, author:prev.author || '', lic:prev.lic || '', url:r.page || '', linked:r.linked })) return;
+      PHOTO_EDIT_MODE = true;
+      try { localStorage.setItem('cona-photo-edit', '1'); } catch (er) {}
+      toast(r.linked ? 'Kept as a link: this site does not allow embedding, so the photo shows only while online.'
+                     : 'Photo replaced — add author and licence below.');
+      done();
+    } catch (er) { card.classList.remove('busy'); toast(er.message); }
+  });
 }
 /** The source of this very file: fetched from where it is served, or picked from disk when opened locally. */
 async function appSourceText() {
@@ -5579,19 +5686,20 @@ function photoEditorBar(rerender) {
   const btn = (label, fn, cls) => el('button', { class:'btn' + (cls ? ' ' + cls : ''), text:label, onclick:fn });
   return el('div', { class:'photobar' }, [
     el('div', { class:'photobar-head', html:'<b>' + t('Photo editor') + '</b> · ' +
-      t('Pick a material below, then upload, drop, paste or link its photograph.') +
+      t('One material at a time: press Upload JPEG on its card, or drag a picture onto it from a folder or another browser tab. Click a card to paste, link or credit its photograph.') +
       ' <span class="photobar-n">' + n + ' ' + t('replaced in this browser') + '</span>' }),
     el('p', { class:'photobar-note', text:t('Replacements stay in this browser until published: download the app with the photographs baked in and upload that index.html to the repository. Students see them after that.') }),
     el('div', { class:'photobar-acts' }, [
       btn('Download app with these photos', downloadAppWithPhotos, 'solid'),
-      btn('Export photo pack', exportPhotoPack),
-      btn('Import photo pack', () => importPhotoPack(rerender)),
       btn('Undo all replacements', () => { if (!n || !confirm(t('Undo every photo replacement made in this browser?'))) return;
         Object.keys(PHOTO_EDITS).forEach(revertPhoto); rerender(); }),
       btn('Close editor', () => { PHOTO_EDIT_MODE = false;
         try { localStorage.removeItem('cona-photo-edit'); } catch (e) {}
         if (/edit-photos/.test(location.hash)) history.replaceState(null, '', location.href.split('#')[0]);
-        rerender(); })
+        rerender(); }),
+      el('span', { class:'photobar-sep' }),
+      btn('Export photo pack', exportPhotoPack, 'quiet'),
+      btn('Import photo pack', () => importPhotoPack(rerender), 'quiet')
     ])
   ]);
 }
@@ -5615,20 +5723,23 @@ function photoEditorFor(key, rerender) {
     say('Reading…');
     try { commit(await photoFromFile(f), false); } catch (e) { say(e.message, true); }
   };
-  const fileIn = el('input', { type:'file', accept:'image/*', style:'display:none' });
+  const fileIn = el('input', { type:'file', accept:PHOTO_ACCEPT, style:'display:none' });
   fileIn.addEventListener('change', () => fileIn.files[0] && takeFile(fileIn.files[0]));
   const drop = el('div', { class:'photodrop', tabindex:'0', role:'button',
-    text:t('Drop an image here, click to choose a file, or paste one (Ctrl/⌘ + V)') });
+    text:t('Drop an image here — a file, or a picture dragged straight from another browser tab — click to choose a file, or paste one (Ctrl/⌘ + V)') });
   drop.addEventListener('click', () => fileIn.click());
   drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('on'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('on'));
-  drop.addEventListener('drop', e => {
-    e.preventDefault(); drop.classList.remove('on');
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) return takeFile(f);
-    const u = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-    if (u) { fLink.value = u.split('\n')[0]; useLink(); }
+  drop.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove('on');
+    if (PHOTO_DRAG_INTERNAL) return;
+    say('Reading…');
+    try {
+      const r = await photoFromDrop(e.dataTransfer);
+      commit(r.img, r.linked, r.page);
+      if (r.linked) toast('Kept as a link: this site does not allow embedding, so the photo shows only while online.');
+    } catch (er) { say(er.message, true); }
   });
   drop.addEventListener('paste', e => {
     const it = Array.from(e.clipboardData.items || []).find(i => /^image\//.test(i.type));
@@ -5806,7 +5917,14 @@ function buildMaterials(host) {
       card.appendChild(el('span', { class:'fambar', style:'background:' + materialColor({ key:m.key }) }));
       card.appendChild(el('span', { class:'mname', text:m.name }));
       card.appendChild(el('span', { class:'msub', text:sub }));
-      grid.appendChild(card);
+      card.setAttribute('data-drop', t('Drop to replace the photo'));
+      cardDropTarget(card, m.key, () => { sel = m.key; wantScroll = true; rerender(); });
+      if (PHOTO_EDIT_MODE) {
+        const cell = el('div', { class:'mcell' }, [card, el('button', { class:'mupload', type:'button',
+          text:'Upload JPEG', title:t('Choose a JPEG (or PNG, WebP) for:') + ' ' + t(m.name),
+          onclick:() => pickPhotoFor(m.key, () => { sel = m.key; wantScroll = true; rerender(); }) })]);
+        grid.appendChild(cell);
+      } else grid.appendChild(card);
     });
     frag.appendChild(grid);
     if (sel && MAT[sel]) {
@@ -7536,7 +7654,16 @@ Object.assign(PT, {
   'Choose this app’s index.html to write the photographs into.': 'Escolha o index.html desta aplicação para nele escrever as fotografias.',
   'index.html downloaded — upload it to the repository to publish.': 'index.html descarregado — carregue-o no repositório para publicar.',
   '{} photographs imported.': '{} fotografias importadas.',
-  'That file is not a photo pack.': 'Esse ficheiro não é um pacote de fotografias.'
+  'That file is not a photo pack.': 'Esse ficheiro não é um pacote de fotografias.',
+  'Drop to replace the photo': 'Largue para substituir a fotografia',
+  'Upload JPEG': 'Carregar JPEG',
+  'Choose a JPEG (or PNG, WebP) for:': 'Escolha um JPEG (ou PNG, WebP) para:',
+  'One material at a time: press Upload JPEG on its card, or drag a picture onto it from a folder or another browser tab. Click a card to paste, link or credit its photograph.': 'Um material de cada vez: carregue em Carregar JPEG no seu cartão, ou arraste uma imagem para ele a partir de uma pasta ou de outro separador. Clique num cartão para colar, ligar ou creditar a sua fotografia.',
+  'Photo replaced — add author and licence below.': 'Fotografia substituída — indique autor e licença abaixo.',
+  'Nothing usable was dropped — drag the picture itself, or save it and drop the file.': 'Nada utilizável foi largado — arraste a própria imagem, ou guarde-a e largue o ficheiro.',
+  'That picture could not be read. Save it to your computer and drop the file instead.': 'Não foi possível ler essa imagem. Guarde-a no computador e largue o ficheiro.',
+  'Drag a picture from any browser tab or folder onto a material below — or pick one and upload, paste or link its photograph.': 'Arraste uma imagem de qualquer separador ou pasta para um material abaixo — ou escolha um e carregue, cole ou ligue a sua fotografia.',
+  'Drop an image here — a file, or a picture dragged straight from another browser tab — click to choose a file, or paste one (Ctrl/⌘ + V)': 'Largue aqui uma imagem — um ficheiro, ou uma imagem arrastada diretamente de outro separador — clique para escolher um ficheiro, ou cole uma (Ctrl/⌘ + V)'
 });
 
 /* PT v2.0.0: the boot above ran before this dictionary existed, so static
