@@ -609,7 +609,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.3.2',
+  version:     '2.4.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5672,8 +5672,110 @@ function buildMaterials(host) {
     ' — Gerador de Preços, CYPE.' }));
 }
 
+
+/* ================================================================
+   v2.4.0 — SUPPLIERS (directory tab, no images)
+   ----------------------------------------------------------------
+   Verified companies per region, each with the library materials it
+   actually offers — the company-to-offerings link, assessed openly.
+   Text links only (logos are trademarked); entries researched Oct 2026.
+   Anything without a verified entry is listed as missing instead of
+   being invented. Region follows the site until another is picked.
+   ================================================================ */
+const SUPPLIERS = [
+  { n:'Preceram', u:'https://preceram.pt/', l:'Pombal', r:'Centro', k:'producer',
+    mats:['tijolo11','tijolo15','tijolo22','tijolom'] },
+  { n:'Preceram Norte', u:'https://preceram.pt/preceram-norte/', l:'Águeda', r:'Centro', k:'producer',
+    mats:['tijolo11','tijolo15','tijolo22'] },
+  { n:'Gyptec', u:'https://gyptec.eu/en', l:'Figueira da Foz', r:'Centro', k:'producer', mats:['gesso'] },
+  { n:'Volcalis', u:'https://volcalis.pt/', l:'Aveiro', r:'Centro', k:'producer', mats:['mw'] },
+  { n:'Nexclay', u:'https://nexclay.pt/', l:'Aveiro', r:'Centro', k:'producer', mats:['betaol'] },
+  { n:'Pedrosa e Irmãos', u:'https://pedrosairmaos.com/en', l:'Leiria', r:'Centro', k:'producer',
+    mats:['madeirae','madeirad','soalho'] },
+  { n:'Granitospinhel', u:'https://granitospinhel.pt', l:'Pinhel', r:'Centro', k:'producer', mats:['pedrag'] },
+  { n:'Granitos BHM', u:'https://granitosbhm.pt', l:'Guarda', r:'Centro', k:'producer', mats:['pedrag'] },
+  { n:'Aleluia Ceramics', u:'https://aleluia.pt', l:'Aveiro', r:'Centro', k:'producer', mats:['ceramico'] },
+  { n:'Secil', u:'https://www.secil.pt/', l:'Maceira-Liz', r:'Centro', k:'producer',
+    mats:['betao','betonilha','reboco','seixo'] },
+  { n:'Amorim Cork Insulation', u:'https://www.amorimcorkinsulation.com/en', l:'Vendas Novas', r:'Sul', k:'producer', mats:['icb'] },
+  { n:'Marmoz', u:'https://marmoz.com/en', l:'Estremoz', r:'Sul', k:'producer', mats:['pedran'] },
+  { n:'AGF Mármores', u:'https://agf-marmores.pt/en', l:'Vila Viçosa', r:'Sul', k:'producer', mats:['pedran'] },
+  { n:'Granoguli', u:'https://www.granoguli.com/en/sobre-nos', l:'Vila Viçosa', r:'Sul', k:'producer', mats:['pedran'] },
+  { n:'Secil', u:'https://www.secil.pt/', l:'Outão', r:'Sul', k:'producer',
+    mats:['betao','betonilha','reboco','seixo'] },
+  { n:'Tecnovia', u:'https://tecnovia.pt/', l:'Ferreira do Alentejo', r:'Sul', k:'producer',
+    mats:['seixo','betao','betonilha'] },
+  { n:'Matermaxime', u:'https://matermaxime.pt/', l:'Pêro Pinheiro', r:'Sul', k:'distributor',
+    mats:['seixo','reboco','blococ','tijolo11','tijolo15','tijolo22'],
+    d:['Declared ~50 km delivery.', 'Entrega declarada ~50 km.'] },
+  { n:'Granitos do Norte', u:'https://granitosdonorte.com/en', l:'Marco de Canaveses', r:'Norte', k:'producer',
+    mats:['pedrag','pedran'] },
+  { n:'Marmores Freitas', u:'https://marmoresfreitas.pt', l:'Fafe', r:'Norte', k:'producer',
+    mats:['pedrag','pedran'] },
+  { n:'Oliveira Rodrigues', u:'https://www.or-granitos.com/', l:'Vila Pouca de Aguiar', r:'Norte', k:'producer', mats:['pedrag'] },
+  { n:'Cimentos Madeira', u:'https://www.cimentosmadeira.com/', l:'Funchal', r:'Madeira', k:'producer',
+    mats:['betao','seixo'] },
+  { n:'Marques Britas', u:'https://marquesbritas.pt/', l:'Ribeira Grande', r:'Açores', k:'producer',
+    mats:['pedrab','seixo','betao','madeirae'] },
+  { n:'Soluções M', u:'https://marquesbritas.pt/en/sector', l:'Açores', r:'Açores', k:'distributor', mats:['aco'] },
+  { n:'Tecnovia Açores', u:'https://tecnovia.pt/', l:'Graciosa', r:'Açores', k:'producer',
+    mats:['seixo','betao','betonilha'] }
+];
+const KIND_LABEL = { producer:'Producer', distributor:'Distributor', portal:'Portal' };
+function buildSuppliers(host) {
+  const Z = STATE.zone;
+  pageHead(host, 'Suppliers',
+    'Who sells what, where: companies and their products for the shown region — verified examples, never exhaustive.');
+  const box = el('div');
+  host.appendChild(box);
+  let region = 'auto';
+  rebuildable(box, (frag, rerender) => {
+    const sz = siteZone(), eff = region === 'auto' ? sz : region;
+    const list = SUPPLIERS.filter(s => !eff || s.r === eff);
+    const covered = {};
+    list.forEach(s => s.mats.forEach(k => covered[k] = 1));
+    const missing = MATERIALS.filter(m => !covered[m.key]);
+    frag.appendChild(stats([
+      statCard(t('Region'), eff || '—', null, region === 'auto' ? t('Follows the site') : t('Chosen by hand')),
+      statCard(t('Companies'), String(list.length), null, t('Verified entries')),
+      statCard(t('Materials covered'), Object.keys(covered).length + ' / 33', null, t('Of the library'))
+    ]));
+    frag.appendChild(hint('sup-dir',
+      'A directory, not a marketplace: every entry below was verified — producers make, distributors stock. Anything without a verified entry is listed at the foot as missing instead of being invented. Confirm dealers near the site before specifying.'));
+    const mbar = el('div', { class:'mosaicbar' });
+    const rsel = el('select', { onchange:e => { region = e.target.value; rerender(); } });
+    rsel.appendChild(el('option', { value:'auto',
+      text:t('Site region') + (sz ? ' (' + sz + ')' : '') }));
+    ZONES5.forEach(z => rsel.appendChild(el('option', { value:z, text:z,
+      selected: region === z ? '' : null })));
+    mbar.appendChild(el('div', null, [ el('label', { text:t('Region') }), rsel ]));
+    frag.appendChild(mbar);
+    list.forEach(s => {
+      const card = el('div', { class:'costbox' });
+      card.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html:'<b><a href="' + s.u + '" target="_blank" rel="noopener noreferrer">' + s.n + '</a></b>' }),
+        el('span', { text:(s.l ? s.l + ' · ' : '') + t(KIND_LABEL[s.k] || s.k) })
+      ]));
+      card.appendChild(el('div', { style:'margin:6px 0 2px' },
+        s.mats.map(k => el('span', { class:'zonepill', text:t((MAT[k] || {}).name || k) }))));
+      if (s.d) card.appendChild(el('p', { class:'costlink', text:(LANG === 'pt' ? s.d[1] : s.d[0]) }));
+      frag.appendChild(card);
+    });
+    if (missing.length) frag.appendChild(el('p', { class:'costlink',
+      html:'<b>' + t('No verified supplier in this region for:') + '</b> ' +
+        missing.map(m => t(m.name)).join(' · ') }));
+    frag.appendChild(section(t('The directory as a table'),
+      t('Company, region, products and websites for every entry'),
+      'fornecedores-diretorio', () => csvRows(
+        [[t('Company'), t('Region'), t('Products'), t('Website')]]
+        .concat(SUPPLIERS.map(s => [s.n, s.r,
+          s.mats.map(k => t((MAT[k] || {}).name || k)).join(' · '), s.u])))));
+  });
+}
+
 const TABS = [
   { key:'materials', label:'Materials',      build:buildMaterials },
+  { key:'suppliers', label:'Suppliers',      build:buildSuppliers },
   { key:'roofs',     label:'Roofs',          build:buildRoofs },
   { key:'floors',    label:'Floors',         build:buildFloorsPavements },
   { key:'wallsext',  label:'External walls', build:buildWallsExt },
@@ -7095,6 +7197,31 @@ Object.assign(PT, {
 });
 PT_HINT['mat-photos'] =
   'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.';
+
+
+/* v2.4.0: English–Portuguese for the suppliers directory. */
+Object.assign(PT, {
+  'Suppliers': 'Fornecedores',
+  'Who sells what, where: companies and their products for the shown region — verified examples, never exhaustive.': 'Quem vende o quê, onde: empresas e produtos para a região mostrada — exemplos verificados, nunca exaustivos.',
+  'Companies': 'Empresas',
+  'Materials covered': 'Materiais cobertos',
+  'Follows the site': 'Segue o local',
+  'Chosen by hand': 'Escolha manual',
+  'Verified entries': 'Entradas verificadas',
+  'Of the library': 'Da biblioteca',
+  'Producer': 'Produtor',
+  'Distributor': 'Distribuidor',
+  'Portal': 'Portal',
+  'Site region': 'Região do local',
+  'Company': 'Empresa',
+  'Products': 'Produtos',
+  'Website': 'Sítio web',
+  'The directory as a table': 'O diretório em tabela',
+  'Company, region, products and websites for every entry': 'Empresa, região, produtos e sítios web de todas as entradas',
+  'No verified supplier in this region for:': 'Sem fornecedor verificado nesta região para:'
+});
+PT_HINT['sup-dir'] =
+  'Um diretório, não um mercado: cada entrada abaixo foi verificada — produtores fabricam, distribuidores armazenam. Tudo o que não tenha entrada verificada é listado no fim como em falta em vez de ser inventado. Confirmar distribuidores junto ao local antes de especificar.';
 
 /* PT v2.0.0: the boot above ran before this dictionary existed, so static
    markup ([data-t]) is re-applied now that every STATIC_PT entry is filled.
