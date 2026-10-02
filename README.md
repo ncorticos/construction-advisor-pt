@@ -25,6 +25,8 @@ The current, official versions of all SCE legislation — consolidated and kept 
 
 The thirty-three material photographs are embedded from [Wikimedia Commons](https://commons.wikimedia.org/), each under its own free licence (CC BY, CC BY-SA, CC0 or public domain). Author, licence and file page ride with every material inside the app's detail panel — the credits live where the images are seen.
 
+**Replacing a photograph (v2.7.0).** On the Materials tab, press **Edit photos** (or open the app with `#edit-photos` at the end of the address). Pick a material and upload, drag in, paste, or link its photograph — a Wikimedia Commons file page is turned into its image automatically — then fill in author, licence and source page. Each image is cropped from the centre to the mosaic proportion (576 × 402 px JPEG) and embedded, so the app stays offline. Replacements live only in the browser that made them until **Download app with these photos** produces a new `index.html` with them baked in; upload that file to this repository to publish them to students. A link from a site that forbids embedding is kept as a live link and shows only while online.
+
 ### Other sources cited
 
 A few other works are drawn on for specific figures but are commercially published and copyrighted, so only the citation is given here — the same one the app's own footer shows:
