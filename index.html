@@ -405,24 +405,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .mcard .mphoto{width:100%; height:110px; object-fit:cover; border-radius:6px; display:block; background:var(--wash)}
 .mcard .fambar{height:5px; border-radius:3px; width:100%}
 .mcard.dim{opacity:.38}
-/* --- v2.2.2: hover to inspect -------------------------------------------------
-   On devices with a pointer, hovering a mosaic thumbnail pops it to ~3x so a
-   student can read the material. It floats above its neighbours (no layout
-   shift); on touch screens there is no hover, so tapping the card still opens
-   the large photo in the detail panel below. */
-@media (hover:hover){
-  .mcard .mphoto{transition:transform .18s ease, box-shadow .18s ease}
-  .mcard:hover .mphoto{transform:scale(3); position:relative; z-index:30;
-    box-shadow:0 12px 32px rgba(0,0,0,.35); outline:1px solid var(--line)}
-}
-.mphoto,.dphoto{cursor:zoom-in}
-/* --- v2.3.0: lightbox (tap/click a photo to inspect it) -------------------- */
-.lightbox{position:fixed; inset:0; z-index:200; background:rgba(20,23,26,.84);
-  display:flex; align-items:center; justify-content:center; padding:24px; cursor:zoom-out}
-.lightbox figure{margin:0; width:min(920px,94vw); background:#fff; border-radius:12px; overflow:hidden; cursor:default}
-.lightbox img{display:block; width:100%; max-height:74vh; object-fit:contain; background:#000}
-.lightbox figcaption{padding:10px 14px; font-size:12px; color:var(--ink2)}
-.lightbox figcaption a{color:var(--c1)}
+.matdetail{scroll-margin-top:110px}
 .dphoto{width:100%; max-height:300px; object-fit:cover; border-radius:8px; display:block; margin:4px 0 8px; background:var(--wash)}
 .photocredit{font-size:11px; color:var(--muted)}
 .photocredit a{color:var(--muted)}
@@ -609,7 +592,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.4.1',
+  version:     '2.5.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5414,37 +5397,6 @@ const COST_PANELS = {
 
 
 /* ================================================================
-   v2.3.0 — lightbox: tap/click a photo to inspect it large. The CSS hover
-   zoom covers pointer devices; this covers touch, where hover does not exist,
-   and anyone who wants the photo bigger than hover gives. Escape or a tap
-   anywhere closes it; the credit link stays clickable.
-   ================================================================ */
-function closeLightbox() {
-  const ov = document.querySelector('.lightbox');
-  if (ov) ov.remove();
-}
-function openLightbox(key) {
-  const P = MAT_PHOTO[key], M = MAT[key];
-  if (!P || !M) return;
-  closeLightbox();
-  const ov = el('div', { class:'lightbox', role:'dialog', 'aria-label':t(M.name),
-    onclick:() => closeLightbox() });
-  const fig = el('figure', null, [
-    el('img', { src:P.img, alt:M.name }),
-    el('figcaption', { html:'<b>' + t(M.name) + '</b><br>' + t('Photo:') + ' '
-      + P.author + ' (' + P.lic + '), '
-      + '<a href="' + P.url + '" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>' })
-  ]);
-  fig.addEventListener('click', e => { if (e.target && e.target.tagName === 'A') e.stopPropagation(); });
-  ov.appendChild(fig);
-  document.body.appendChild(ov);
-  if (!window.__caLBesc) {
-    window.__caLBesc = 1;
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
-  }
-}
-
-/* ================================================================
    v2.1.0 — MATERIAL MOSAIC (first tab)
    ----------------------------------------------------------------
    Availability before solutions: the thirty-three materials of the
@@ -5572,7 +5524,7 @@ function buildMaterials(host) {
     'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.'));
   const box = el('div');
   host.appendChild(box);
-  let filter = 'all', sel = null;
+  let filter = 'all', sel = null, wantScroll = false;
   rebuildable(box, (frag, rerender) => {
     const eff = siteZone();
     frag.appendChild(el('div', { class:'limitrow' }, [
@@ -5590,8 +5542,7 @@ function buildMaterials(host) {
       const sub = (m.r !== undefined ? 'R ' + fmt(m.r, 2) : 'λ ' + fmt(m.lam, 3))
         + ' · ' + (MAT_KIND[m.key] === 'natural' ? 'Natural' : 'Industrial');
       const card = el('button', { class:'mcard' + (sel === m.key ? ' sel' : '') + (inZone(m.key, eff) ? '' : ' dim'),
-        onclick:(e) => { sel = (sel === m.key ? null : m.key); rerender();
-          if (e && e.target && e.target.classList && e.target.classList.contains('mphoto')) openLightbox(m.key); } });
+        onclick:() => { sel = (sel === m.key ? null : m.key); wantScroll = sel !== null; rerender(); } });
       const ph = MAT_PHOTO[m.key];
       if (ph) card.appendChild(el('img', { class:'mphoto', src:ph.img, alt:m.name, loading:'lazy' }));
       card.appendChild(el('span', { class:'fambar', style:'background:' + materialColor({ key:m.key }) }));
@@ -5602,14 +5553,14 @@ function buildMaterials(host) {
     frag.appendChild(grid);
     if (sel && MAT[sel]) {
       const M = MAT[sel], lam = lamEq(M);
-      const d = el('div', { class:'costbox' });
+      const d = el('div', { class:'costbox matdetail' });
       d.appendChild(el('div', { class:'limitrow' }, [
         el('span', { html:'<b>' + t(M.name) + '</b>' }),
         el('span', { text:(MAT_KIND[sel] === 'natural' ? 'Natural' : 'Industrial') + ' · ' + t(M.group) })
       ]));
       const P = MAT_PHOTO[sel];
       if (P) {
-        d.appendChild(el('img', { class:'dphoto', src:P.img, alt:M.name, loading:'lazy', onclick:() => openLightbox(sel) }));
+        d.appendChild(el('img', { class:'dphoto', src:P.img, alt:M.name, loading:'lazy' }));
         d.appendChild(el('p', { class:'photocredit',
           html:t('Photo:') + ' ' + P.author + ' (' + P.lic + '), '
             + '<a href="' + P.url + '" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>' }));
@@ -5642,6 +5593,10 @@ function buildMaterials(host) {
           '<a href="https://geradordeprecos.info/fabricantes/" target="_blank" rel="noopener noreferrer">' +
           t('Manufacturers index at the Gerador de Preços') + '</a> — ' + t('confirm dealers near the site.') }));
       frag.appendChild(d);
+      if (wantScroll) { wantScroll = false; setTimeout(() => {
+        const n = box.querySelector('.matdetail');
+        if (n) n.scrollIntoView({ behavior:'smooth', block:'start' });
+      }, 60); }
     }
   });
 
