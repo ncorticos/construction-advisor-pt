@@ -416,6 +416,10 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photobar-n{font-family:var(--mono); font-size:11px; color:var(--c1)}
 .photobar-note{font-size:11.5px; color:var(--muted); margin:4px 0 8px}
 .photobar-acts{display:flex; flex-wrap:wrap; gap:6px}
+.photobar-pub{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px}
+.photobar-pub input[type=text],.photobar-pub input[type=password]{font-size:12px; padding:5px 8px;
+  border:1px solid var(--line); border-radius:6px}
+.pubauto{display:flex; gap:6px; align-items:center; font-size:12px; color:var(--ink2)}
 .photoedit{border:1px dashed var(--c1); border-radius:8px; padding:10px 12px; margin:6px 0 10px}
 .photoedit-head{font-size:12.5px; margin-bottom:8px}
 .photodrop{border:1.5px dashed var(--faint); border-radius:8px; padding:18px 12px; text-align:center;
@@ -610,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.7.3',
+  version:     '2.7.4',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5471,7 +5475,7 @@ function photoCreditHtml(P) {
   return parts.length ? t('Photo:') + ' ' + parts.join(', ') : '';
 }
 function savePhotoEdits() {
-  try { localStorage.setItem(PHOTO_STORE, JSON.stringify(PHOTO_EDITS)); return true; }
+  try { localStorage.setItem(PHOTO_STORE, JSON.stringify(PHOTO_EDITS)); scheduleAutoPublish(); return true; }
   catch (e) { toast('This browser refused to keep the photo — storage is full or blocked.'); return false; }
 }
 function setPhoto(key, rec) {
@@ -5551,14 +5555,116 @@ async function appSourceText() {
 async function downloadAppWithPhotos() {
   let src;
   try { src = await appSourceText(); } catch (e) { if (e.message !== 'none') toast(e.message); return; }
+  const out = bakedAppSource(src);
+  download(new Blob([out], { type:'text/html;charset=utf-8' }), 'index.html');
+  toast('index.html downloaded — upload it to the repository to publish.');
+}
+/* Publish straight to the GitHub repository, so a replacement can go from
+   this editor to the students with no download–upload round trip, and can
+   optionally publish itself on every replacement. Needs a personal access
+   token (classic with Contents write, or fine-grained scoped to this one
+   repository). The token lives only in this browser's localStorage — it is
+   never written into the page, the baked file, or the repository. */
+const GH_STORE = 'cona-gh';
+function ghSettings() {
+  try { return Object.assign({ repo:'', branch:'main', token:'', auto:false },
+    JSON.parse(localStorage.getItem(GH_STORE) || '{}')); }
+  catch (e) { return { repo:'', branch:'main', token:'', auto:false }; }
+}
+function ghSave(s) { try { localStorage.setItem(GH_STORE, JSON.stringify(s)); } catch (e) {} }
+function b64encodeUtf8(str) {
+  const b = new TextEncoder().encode(str);
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000)
+    s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function bakedAppSource(src) {
   const merged = {};
   MATERIALS.forEach(m => { if (MAT_PHOTO[m.key]) {
     const P = MAT_PHOTO[m.key];
     merged[m.key] = { img:P.img, author:P.author || '', lic:P.lic || '', url:P.url || '' };
   } });
-  const out = src.replace(/^const MAT_PHOTO = .*;$/m, () => 'const MAT_PHOTO = ' + JSON.stringify(merged) + ';');
-  download(new Blob([out], { type:'text/html;charset=utf-8' }), 'index.html');
-  toast('index.html downloaded — upload it to the repository to publish.');
+  return src.replace(/^const MAT_PHOTO = .*;$/m, () => 'const MAT_PHOTO = ' + JSON.stringify(merged) + ';');
+}
+let ghTimer = null, ghBusy = false, ghAgain = false;
+function scheduleAutoPublish() {
+  const s = ghSettings();
+  if (!s.auto || !s.token) return;
+  clearTimeout(ghTimer);
+  ghTimer = setTimeout(() => publishToGitHub(null), 4000);
+}
+async function publishToGitHub(say) {
+  if (ghBusy) { ghAgain = true; return; }
+  ghBusy = true;
+  try { await githubPublish(say || (s => toast(s))); }
+  finally { ghBusy = false; if (ghAgain) { ghAgain = false; publishToGitHub(say); } }
+}
+async function githubPublish(say) {
+  const s = ghSettings();
+  const repo = (s.repo || '').trim(), branch = (s.branch || 'main').trim() || 'main',
+    token = (s.token || '').trim();
+  if (!/^[^\/\s]+\/[^\/\s]+$/.test(repo) || !token) {
+    say('Fill in repository and token first.', true); return;
+  }
+  say('Publishing…');
+  let src;
+  try {
+    const r = await fetch(location.href.split('#')[0], { cache:'no-store' });
+    if (!r.ok) throw new Error('read');
+    src = await r.text();
+    if (src.indexOf('const MAT_PHOTO = ') < 0) throw new Error('read');
+  } catch (e) { say('Could not read this page to bake it. Download it instead.', true); return; }
+  const body = bakedAppSource(src);
+  const url = 'https://api.github.com/repos/' + repo + '/contents/index.html';
+  const auth = { 'Accept':'application/vnd.github+json', 'Authorization':'Bearer ' + token };
+  const put = sha => fetch(url, { method:'PUT',
+    headers:Object.assign({ 'Content-Type':'application/json' }, auth),
+    body:JSON.stringify({ message:'Photos: update material photographs',
+      content:b64encodeUtf8(body), sha:sha, branch }) });
+  const getSha = async () => {
+    try {
+      const g = await fetch(url + '?ref=' + encodeURIComponent(branch), { headers:auth });
+      if (g.ok) return (await g.json()).sha;
+    } catch (e) { /* new file, or no connection — PUT decides */ }
+    return undefined;
+  };
+  try {
+    let r = await put(await getSha());
+    if (r.status === 409 || r.status === 422) r = await put(await getSha());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    say('Published to GitHub — Pages rebuilds in about a minute.');
+  } catch (e) { say('Publish failed. Check the token, the repository and the connection.', true); }
+}
+function photoPublishRow() {
+  const s = ghSettings();
+  const repoIn = el('input', { type:'text', spellcheck:'false', autocomplete:'off',
+    placeholder:t('owner/repository, e.g. ncorticos/construction-advisor-pt'), style:'width:250px' });
+  repoIn.value = s.repo || '';
+  const branchIn = el('input', { type:'text', spellcheck:'false', autocomplete:'off',
+    placeholder:t('branch (main)'), style:'width:100px' });
+  branchIn.value = s.branch || 'main';
+  const tokIn = el('input', { type:'password', autocomplete:'off',
+    placeholder:t('GitHub token — this repository only') });
+  tokIn.value = s.token || '';
+  const autoBox = el('input', { type:'checkbox' });
+  autoBox.checked = !!s.auto;
+  const keep = () => ghSave({ repo:repoIn.value.trim(), branch:branchIn.value.trim() || 'main',
+    token:tokIn.value.trim(), auto:autoBox.checked });
+  [repoIn, branchIn, tokIn].forEach(i => i.addEventListener('input', keep));
+  autoBox.addEventListener('change', keep);
+  const row = el('div', { class:'photobar-pub' }, [
+    repoIn, branchIn, tokIn,
+    el('button', { class:'btn solid', text:'Save to GitHub',
+      onclick:() => { keep(); publishToGitHub(null); } }),
+    el('label', { class:'pubauto' },
+      [autoBox, el('span', { text:'Publish on every replacement' })]),
+    el('button', { class:'btn', text:'Forget token', onclick:() => {
+      tokIn.value = ''; keep(); toast('Token forgotten in this browser.'); } })
+  ]);
+  row.appendChild(el('p', { class:'photobar-note',
+    text:'Token stays in this browser. Use a fine-grained token scoped to this repository only.' }));
+  return row;
 }
 function exportPhotoPack() {
   download(new Blob([JSON.stringify(PHOTO_EDITS)], { type:'application/json' }), 'material-photos.json');
@@ -5594,7 +5700,8 @@ function photoEditorBar(rerender) {
         try { localStorage.removeItem('cona-photo-edit'); } catch (e) {}
         if (/edit-photos/.test(location.hash)) history.replaceState(null, '', location.href.split('#')[0]);
         rerender(); })
-    ])
+    ]),
+    photoPublishRow()
   ]);
 }
 /** The editor inside a material's detail panel. */
@@ -7536,6 +7643,19 @@ Object.assign(PT, {
   'Undo all replacements': 'Desfazer todas as substituições',
   'Undo every photo replacement made in this browser?': 'Desfazer todas as substituições de fotografias feitas neste navegador?',
   'Close editor': 'Fechar o editor',
+  'Save to GitHub': 'Guardar no GitHub',
+  'Publish on every replacement': 'Publicar a cada substituição',
+  'Forget token': 'Esquecer token',
+  'Token forgotten in this browser.': 'Token esquecido neste navegador.',
+  'Token stays in this browser. Use a fine-grained token scoped to this repository only.': 'O token fica neste navegador. Use um token granular restrito apenas a este repositório.',
+  'GitHub token — this repository only': 'Token do GitHub — só para este repositório',
+  'owner/repository, e.g. ncorticos/construction-advisor-pt': 'proprietário/repositório, ex. ncorticos/construction-advisor-pt',
+  'branch (main)': 'ramo (main)',
+  'Fill in repository and token first.': 'Preencha primeiro o repositório e o token.',
+  'Publishing…': 'A publicar…',
+  'Published to GitHub — Pages rebuilds in about a minute.': 'Publicado no GitHub — o Pages reconstrói em cerca de um minuto.',
+  'Could not read this page to bake it. Download it instead.': 'Não foi possível ler esta página para a gravar. Descarregue-a em vez disso.',
+  'Publish failed. Check the token, the repository and the connection.': 'Falha ao publicar. Verifique o token, o repositório e a ligação.',
   'Replace this photograph': 'Substituir esta fotografia',
   'replaced': 'substituída',
   'linked, not embedded': 'ligada, não incorporada',
