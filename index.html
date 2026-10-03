@@ -610,7 +610,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.7.0',
+  version:     '2.7.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5241,8 +5241,10 @@ function restartAssessment() {
   STATE.autoAltKey = null;
 
   const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse');
-  conc.value = '';
+  conc.value = 'Lisboa';
   conc.dispatchEvent(new Event('input', { bubbles:true }));
+  $('#concMenu').hidden = true;
+  conc.setAttribute('aria-expanded', 'false');
   alt.value = '100';
   alt.dispatchEvent(new Event('input', { bubbles:true }));
   use.value = 'hab';
@@ -6365,7 +6367,7 @@ function initSetup() {
     mountApp({ conc: hit, nuts: nuts, alt: Math.max(0, +alt.value || 0), use: use.value,
       operation: opBtn ? opBtn.dataset.op : 'new' });
   });
-  refresh();
+  if (!conc.value.trim()) pickConcelho('Lisboa'); else refresh();
 }
 
 /* --- the application ------------------------------------------------------- */
