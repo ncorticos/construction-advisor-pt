@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.7.4',
+  version:     '2.7.5',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5636,6 +5636,41 @@ async function githubPublish(say) {
     say('Published to GitHub — Pages rebuilds in about a minute.');
   } catch (e) { say('Publish failed. Check the token, the repository and the connection.', true); }
 }
+async function photoBlob(src) {
+  /* Always PNG: the clipboard accepts image/png, not jpeg. Capped at
+     1600 px so a full-resolution original stays pasteable. */
+  const img = await loadImage(src, false);
+  const s = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * s));
+  c.height = Math.max(1, Math.round(img.naturalHeight * s));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return await new Promise((ok, no) =>
+    c.toBlob(b => b ? ok(b) : no(new Error('encode')), 'image/png'));
+}
+/* Copy the shown photograph — bytes when possible, address as fallback —
+   so it can be pasted into another drop zone or any document. Works for
+   embedded and same-origin pictures; a host that blocks embedding only
+   yields its address. */
+async function copyPhoto(P, say) {
+  const src = P && P.img;
+  if (!src) return;
+  if (!navigator.clipboard || !navigator.clipboard.write) {
+    say('Copy failed in this browser.', true); return;
+  }
+  say('Copying…');
+  try {
+    const b = await photoBlob(src);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png':b })]);
+    toast('Photograph copied — paste it where you need it.');
+    say('');
+  } catch (e) {
+    try {
+      await navigator.clipboard.writeText(src);
+      toast('Image address copied instead.'); say('');
+    } catch (e2) { say('Copy failed in this browser.', true); }
+  }
+}
 function photoPublishRow() {
   const s = ghSettings();
   const repoIn = el('input', { type:'text', spellcheck:'false', autocomplete:'off',
@@ -5787,6 +5822,8 @@ function photoEditorFor(key, rerender) {
   box.appendChild(el('p', { class:'photobar-note', text:t('Cropped from the centre to the mosaic proportion. Best: the material alone, filling the frame, even light — like Lightweight concrete.') }));
   if (PHOTO_EDITS[key]) box.appendChild(el('button', { class:'btn', text:'Back to the original photograph',
     onclick:() => { revertPhoto(key); rerender(); } }));
+  box.appendChild(el('button', { class:'btn', text:'Copy photograph',
+    onclick:() => copyPhoto(MAT_PHOTO[key] || {}, say) }));
   box.appendChild(msg);
   return box;
 }
@@ -7646,6 +7683,11 @@ Object.assign(PT, {
   'Save to GitHub': 'Guardar no GitHub',
   'Publish on every replacement': 'Publicar a cada substituição',
   'Forget token': 'Esquecer token',
+  'Copy photograph': 'Copiar fotografia',
+  'Copying…': 'A copiar…',
+  'Photograph copied — paste it where you need it.': 'Fotografia copiada — cole onde precisar.',
+  'Image address copied instead.': 'Endereço da imagem copiado em vez disso.',
+  'Copy failed in this browser.': 'A cópia falhou neste navegador.',
   'Token forgotten in this browser.': 'Token esquecido neste navegador.',
   'Token stays in this browser. Use a fine-grained token scoped to this repository only.': 'O token fica neste navegador. Use um token granular restrito apenas a este repositório.',
   'GitHub token — this repository only': 'Token do GitHub — só para este repositório',
