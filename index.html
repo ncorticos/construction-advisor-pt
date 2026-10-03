@@ -71,10 +71,10 @@ header{
 
 /* ---------- Tabs ---------- */
 nav.tabs{border-bottom:1px solid var(--line); background:#fff}
-.tabs-row{display:flex; align-items:stretch; gap:12px; max-width:1680px; margin:0 auto; padding:0 24px}
-.tabs-inner{display:flex; gap:2px; overflow-x:auto; flex:1 1 auto; min-width:0}
-.tabs-actions{display:flex; gap:6px; align-items:center; flex:0 0 auto; padding-left:10px; border-left:1px solid var(--line2)}
-.tabs-actions .btn{font-size:11.5px; padding:5px 10px; white-space:nowrap}
+.tabs-inner{display:flex; gap:2px; padding:0 24px; max-width:1680px; margin:0 auto; overflow-x:auto}
+.tab.cadbtn{margin-left:auto; color:var(--ink2); font-weight:600}
+.tab.cadbtn + .tab.cadbtn{margin-left:6px}
+
 .tab{
   appearance:none; background:none; border:none; font:inherit; font-size:13px;
   color:var(--muted); padding:11px 14px; cursor:pointer; white-space:nowrap;
@@ -91,6 +91,8 @@ section.page.on{display:block}
 .pagehead{margin-bottom:20px; max-width:760px}
 .pagehead h2{font-size:19px; letter-spacing:-0.02em}
 .pagehead p{margin:5px 0 0; color:var(--muted); font-size:13px}
+@media(min-width:1101px){.pagehead{display:flex; align-items:baseline; gap:22px; max-width:none}
+  .pagehead h2{flex:0 0 auto}.pagehead p{margin:0; max-width:980px; line-height:1.5}}
 
 .grid{display:grid; gap:16px}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -303,8 +305,6 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
   border:1px solid var(--line); border-radius:14px; background:var(--panel);
   box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 26px rgba(16,24,40,.05);
 }
-.setup h2{font-size:21px; letter-spacing:-.3px; margin:0 0 8px}
-.setup>p{font-size:13.5px; color:var(--ink2); line-height:1.7; margin:0 0 22px; max-width:70ch}
 .setup-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px 22px; margin-bottom:20px}
 @media(max-width:700px){.setup-grid{grid-template-columns:1fr}}
 .fld{display:flex; flex-direction:column; gap:6px}
@@ -446,6 +446,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
     <div class="filechip sitechip" id="sitechip">
       <span class="loc" id="chipLoc"></span>
       <span class="meta" id="chipMeta"></span>
+      <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Restart</button>
     </div>
     <div class="langsel" id="langsel" role="group" aria-label="Language / Idioma">
       <button type="button" data-lang="en" aria-pressed="true" title="English">EN</button>
@@ -453,26 +454,22 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
     </div>
   </div>
   <nav class="tabs" id="tabsNav" hidden>
-    <div class="tabs-row">
-      <div class="tabs-inner" role="tablist" id="tablist"></div>
-      <div class="tabs-actions">
-        <button class="btn" id="btnSave" data-t="btnSave" title="Save your progress as a file">Save</button>
-        <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Restart</button>
-      </div>
-    </div>
+    <div class="tabs-inner" role="tablist" id="tablist"></div>
   </nav>
+  <button class="btn" id="btnSave" data-t="btnSave" title="Save your progress as a file" hidden>Save</button>
 </header>
 <input type="file" id="fileLoad" accept="application/json,.json" hidden>
 
 <main>
   <div id="empty">
-    <div class="setup" id="setup">
+    <div class="pagehead">
       <h2 data-t="setupTitle">Where are you building?</h2>
       <p data-t="setupBody">Portuguese thermal regulation classifies a site from two things only: the
         <b>NUTS III</b> region it falls in, and its <b>altitude</b>. Every reference parameter is tabulated for a
         reference altitude and corrected linearly from there. Name the municipality and the height above sea
         level and this application resolves the winter and summer zones, then opens a mosaic of materials — natural and industrialized, relevant to the area — before working through the envelope element by element against the limits actually in force.</p>
-
+    </div>
+    <div class="setup" id="setup">
       <div class="setup-grid">
         <div class="fld">
           <label for="selConc" data-t="fldConc">Municipality</label>
@@ -614,7 +611,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.11.0',
+  version:     '2.12.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6816,6 +6813,8 @@ function mountApp(site, keepTab) {
   document.title = APP.tabName + ' — ' + (site.conc || site.nuts);
 
   const tl = $('#tablist'); tl.innerHTML = '';
+  const sv = $('#btnSave');
+  sv.className = 'tab cadbtn'; sv.hidden = false;
   TABS.forEach((tab, i) => {
     const sect = el('section', { class:'page', id:'page-' + tab.key, role:'tabpanel' });
     app.appendChild(sect);
@@ -6823,6 +6822,7 @@ function mountApp(site, keepTab) {
       html:'<span class="n">' + String(i + 1).padStart(2, '0') + '</span>' + t(tab.label),
       onclick: () => activate(tab.key) }));
   });
+  tl.appendChild(sv);
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
   const wanted = keepTab === 'pavements' ? 'floors' : keepTab === 'climate' ? 'materials' : keepTab;
