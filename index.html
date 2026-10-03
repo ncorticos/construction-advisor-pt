@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.16.0',
+  version:     '2.17.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3081,20 +3081,20 @@ function assemblyEditor(host, spec) {
         : spec.flow === 'h'
         ? 'Layer thickness left to right: outside → inside'
         : 'Layer thickness top to bottom: outside → inside',
-      heightFn: w => (spec.flow === 'h' ? 48 : 240) + 56 + sectionLegendLayout(w, S.layers.length).rows * 16 + 10,
+      heightFn: w => (spec.flow === 'h' ? 180 : 240) + 56 + sectionLegendLayout(w, S.layers.length).rows * 16 + 10,
       render(ctx, W, H) {
-        /* Thickness maps onto the same number of pixels whichever way the
+/* Thickness maps onto the same number of pixels whichever way the
            section is drawn, so 300 mm of wall is exactly as long on screen as
-           300 mm of roof. Only the cross dimension differs: a wall is a
-           shallow band read left to right, a roof a narrow column read top to
-           bottom. Letting the wall run the full canvas width, as it once did,
-           also made the same wall change length when the window was resized. */
-        const SPAN_PX = 240;
+           300 mm of roof, and both bars share one cross dimension: a wall is
+           the roof column transposed, read left to right. Centring the bar, as
+           the roof column already is, also keeps the same wall from changing
+           length when the window is resized. */
+        const SPAN_PX = 240, CROSS_PX = 180;
         const vertical = spec.flow !== 'h';
         const barY = 34;
-        const barH = vertical ? SPAN_PX : 48;
-        const barW = vertical ? 180 : SPAN_PX;
-        const barX = vertical ? Math.round((W - barW) / 2) : 10;
+        const barH = vertical ? SPAN_PX : CROSS_PX;
+        const barW = vertical ? CROSS_PX : SPAN_PX;
+        const barX = Math.round((W - barW) / 2);
         const thick = S.layers.map(layerThickness);
         const total = thick.reduce((a, b) => a + b, 0) || 1;
         const startLbl = spec.bc === 'int' ? t('One face') : t('Outside');
