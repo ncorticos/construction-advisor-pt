@@ -610,7 +610,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.7.2',
+  version:     '2.7.3',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5620,17 +5620,37 @@ function photoEditorFor(key, rerender) {
   const fileIn = el('input', { type:'file', accept:'image/*', style:'display:none' });
   fileIn.addEventListener('change', () => fileIn.files[0] && takeFile(fileIn.files[0]));
   const drop = el('div', { class:'photodrop', tabindex:'0', role:'button',
-    text:t('Drop an image here, click to choose a file, or paste one (Ctrl/⌘ + V)') });
+    text:t('Drop an image here — straight from a web page, no saving needed — or click to choose a file, or paste one (Ctrl/⌘ + V)') });
   drop.addEventListener('click', () => fileIn.click());
   drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('on'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('on'));
+  /* A drag from a web page carries no file — it carries the picture as
+     HTML and/or its address as text — so read those before concluding
+     there is nothing to take. Nothing ever needs saving to disk first. */
   drop.addEventListener('drop', e => {
     e.preventDefault(); drop.classList.remove('on');
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    const dt = e.dataTransfer;
+    const f = dt.files && dt.files[0];
     if (f) return takeFile(f);
-    const u = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-    if (u) { fLink.value = u.split('\n')[0]; useLink(); }
+    const html = dt.getData('text/html');
+    if (html) {
+      try {
+        const src = (new DOMParser().parseFromString(html, 'text/html')
+          .querySelector('img') || {}).src || '';
+        if (/^data:image\//i.test(src)) {
+          say('Reading…');
+          return fetch(src).then(r => r.blob())
+            .then(b => takeFile(new File([b], 'dropped-image', { type:b.type || 'image/png' })))
+            .catch(() => say('That drop carried no picture — drag the image itself, not the page.', true));
+        }
+        if (/^https?:\/\//i.test(src)) { fLink.value = src; return useLink(); }
+      } catch (err) { /* fall through to the text address */ }
+    }
+    const u = (dt.getData('text/uri-list') || dt.getData('text/plain') || '')
+      .split('\n').map(s => s.trim()).find(s => /^https?:\/\//i.test(s));
+    if (u) { fLink.value = u; return useLink(); }
+    say('That drop carried no picture — drag the image itself, not the page.', true);
   });
   drop.addEventListener('paste', e => {
     const it = Array.from(e.clipboardData.items || []).find(i => /^image\//.test(i.type));
@@ -7519,6 +7539,8 @@ Object.assign(PT, {
   'Replace this photograph': 'Substituir esta fotografia',
   'replaced': 'substituída',
   'linked, not embedded': 'ligada, não incorporada',
+  'Drop an image here — straight from a web page, no saving needed — or click to choose a file, or paste one (Ctrl/⌘ + V)': 'Arraste uma imagem para aqui — diretamente de uma página web, sem guardar — ou clique para escolher um ficheiro, ou cole uma (Ctrl/⌘ + V)',
+  'That drop carried no picture — drag the image itself, not the page.': 'Esse arrasto não trouxe nenhuma imagem — arraste a imagem em si, não a página.',
   'Drop an image here, click to choose a file, or paste one (Ctrl/⌘ + V)': 'Arraste uma imagem para aqui, clique para escolher um ficheiro, ou cole uma (Ctrl/⌘ + V)',
   'Image link or Wikimedia Commons file page': 'Ligação da imagem ou página do ficheiro na Wikimedia Commons',
   'Use link': 'Usar ligação',
