@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.17.0',
+  version:     '2.18.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4251,21 +4251,16 @@ function buildWindows(host) {
 
 /* ----------------------------------------------------- WINDOW SHADERS -- */
 const SHD_STATE = {
-  ori:4,                 // index into ORI8
-  winH:2.10, winW:1.60,  // the opening, metres
-  ovD:0.60,              // overhang projection
-  finL:0.00, finR:0.00,  // fin projections, seen from inside looking out
   glaz:0, dev:'epersp', colour:'media', inertia:'media', dbl:true
 };
 
 function buildShaders(host) {
   const Z = STATE.zone;
-  pageHead(host, 'Window shaders',
-    'Shading is the one move that separates the two seasons: it can be made to stop the August sun and let the January sun through, because the two arrive at different heights. The regulation prices it twice — as a shading factor on the gains, and as a ceiling on the solar factor.');
+  pageHead(host, 'Window shading',
+    'Sun control belongs at the opening: movable and integral shading — roller shutters, adjustable or solid shutters, slatted blinds, awnings and curtains — stops the sun before or inside the glass, and the regulation prices each device with a solar factor read straight from its table. Choose the device, its colour and the glazing behind it, then read the combination against the ceiling the summer zone allows.');
 
   rebuildable(host, (frag, rerender) => {
     const S = SHD_STATE;
-    const ori = ORI8[S.ori];
     const G = GLAZING[clamp(S.glaz, 0, GLAZING.length - 1)];
     const DEV = SHADE_DEV.find(d => d.key === S.dev) || SHADE_DEV[6];
     const ci = COLOURS.findIndex(c => c.key === S.colour);
@@ -4273,163 +4268,10 @@ function buildShaders(host) {
     const gt = gTot(G.g, vc, S.dbl);
     const limG = gtotMax(Z, S.inertia);
 
-    /* --- the angles the geometry subtends ---------------------------------
-       Manual SCE §8.4.2 and §8.4.3: the angle is measured between the plane
-       parallel to the glazing and the line joining the CENTRE of the opening
-       to the tip of the shading element. The lever arm is therefore half the
-       opening — half its height for an overhang, half its width for a fin —
-       and not the whole of it. */
-    const aO = subtend(S.ovD, S.winH / 2);
-    const aL = subtend(S.finL, S.winW / 2);
-    const aR = subtend(S.finR, S.winW / 2);
-    const foW = foFactor(aO, ori, 'win', Z.region), foS = foFactor(aO, ori, 'sum', Z.region);
-    const ffLW = ffFactor(aL, ori, 'L', 'win'), ffRW = ffFactor(aR, ori, 'R', 'win');
-    const ffLS = ffFactor(aL, ori, 'L', 'sum'), ffRS = ffFactor(aR, ori, 'R', 'sum');
-    const fsW = foW * ffLW * ffRW, fsS = foS * ffLS * ffRS;
 
     /* --- controls --------------------------------------------------------- */
-    frag.appendChild(controls([
-      selectCtl(t('Orientation'), ORI8.map((o, i) => ({ value:String(i), label:COMPASS8[i] })),
-        String(S.ori), v => { S.ori = +v; rerender(); }),
-      rangeCtl(t('Overhang'), 0, 2.5, 0.05, S.ovD, v => { S.ovD = v; rerender(); }, v => fmt(v, 2) + ' m'),
-      rangeCtl(t('Left fin'), 0, 2.5, 0.05, S.finL, v => { S.finL = v; rerender(); }, v => fmt(v, 2) + ' m'),
-      rangeCtl(t('Right fin'), 0, 2.5, 0.05, S.finR, v => { S.finR = v; rerender(); }, v => fmt(v, 2) + ' m'),
-      el('div', { class:'divider' }),
-      numCtl(t('Opening height'), 0.6, 4, 0.05, S.winH, v => { S.winH = v; rerender(); }, 'm'),
-      numCtl(t('Opening width'), 0.4, 6, 0.05, S.winW, v => { S.winW = v; rerender(); }, 'm')
-    ]));
 
-    frag.appendChild(stats([
-      statCard('F o — the overhang', fmt(foS, 2), null, degs(aO) + ' · ' + t('cooling season')),
-      statCard('F f — both fins', fmt(ffLS * ffRS, 2), null,
-        t('left') + ' ' + fmt(ffLS, 2) + ' × ' + t('right') + ' ' + fmt(ffRS, 2)),
-      statCard('F s in summer', fmt(fsS, 2), null, t('The share of the sun that still arrives')),
-      statCard('F s in winter', fmt(fsW, 2), null, t('What the same device costs you in January'))
-    ]));
 
-    /* --- the section and the plan ----------------------------------------- */
-    makePanel(frag, {
-      title: 'The device, in section and in plan',
-      note: 'The angles the manual reads, subtended at the centre of the opening',
-      aspect: 3.1,
-      render(ctx, W, H) {
-        const halfW = W / 2;
-        const m = 40;
-        /* ---- section, on the left: the overhang over the opening ---- */
-        const drawSection = (ox) => {
-          const availH = H - m - 40;
-          const sc = Math.min((halfW - m * 2) / Math.max(1.2, S.ovD + 0.6), availH / (S.winH + 0.6));
-          const wallX = ox + halfW * 0.42;
-          /* centred in the band, so a shallow device does not leave the drawing
-             stranded at the top of a tall panel */
-          const headY = 26 + Math.max(0, (availH - S.winH * sc) / 2);
-          const sillY = headY + S.winH * sc;
-          /* the wall */
-          stroke(ctx, CH.ink2, 2);
-          seg(ctx, px(wallX), headY - 26, px(wallX), headY);
-          seg(ctx, px(wallX), sillY, px(wallX), sillY + 26);
-          /* the opening */
-          stroke(ctx, '#2563EB', 2.4); seg(ctx, px(wallX), headY, px(wallX), sillY);
-          /* the overhang */
-          if (S.ovD > 0.001) {
-            stroke(ctx, CH.ink, 3);
-            seg(ctx, px(wallX), px(headY), px(wallX - S.ovD * sc), px(headY));
-          }
-          /* the line the manual measures: from the tip of the overhang to the
-             centre of the opening, and the parallel to the glazing it is
-             measured against */
-          const midY = (headY + sillY) / 2;
-          if (S.ovD > 0.001) {
-            stroke(ctx, CH.faint, 1, [2, 3]);
-            seg(ctx, wallX, midY, wallX - S.ovD * sc, midY);      // the lever arm
-            ctx.setLineDash([]);
-            stroke(ctx, '#D97706', 1.4, [4, 3]);
-            seg(ctx, wallX - S.ovD * sc, headY, wallX, midY);
-            ctx.setLineDash([]);
-            label(ctx, degs(aO), wallX - 8, midY - 9, '#D97706', FM(10.5, '600'), 'right', 'middle');
-          }
-          ctx.fillStyle = CH.ink; ctx.beginPath(); ctx.arc(wallX, midY, 2.4, 0, 7); ctx.fill();
-          label(ctx, t('Section'), ox + halfW / 2, H - 16, CH.muted, F(10.5, '600'), 'center', 'middle');
-          label(ctx, t('overhang') + ' ' + fmt(S.ovD, 2) + ' m', wallX - S.ovD * sc - 6, headY - 10, CH.ink2, F(10), 'left', 'middle');
-          label(ctx, t('opening') + ' ' + fmt(S.winH, 2) + ' m', wallX + 8, (headY + sillY) / 2, CH.ink2, F(10), 'left', 'middle');
-        };
-        /* ---- plan, on the right: the two fins beside the opening ---- */
-        const drawPlan = (ox) => {
-          const maxP = Math.max(S.finL, S.finR, 0.4);
-          const availH = H - m - 40;
-          const sc = Math.min((halfW - m * 2) / Math.max(1.2, S.winW + 0.4), availH / (maxP + 0.5));
-          const y0 = 26 + Math.max(0, (availH - maxP * sc) / 2);
-          const cx = ox + halfW / 2;
-          const x0 = cx - S.winW * sc / 2, x1 = cx + S.winW * sc / 2;
-          /* the wall in plan, opening between the two fins */
-          stroke(ctx, CH.ink2, 2);
-          seg(ctx, px(x0 - 34), px(y0), px(x0), px(y0));
-          seg(ctx, px(x1), px(y0), px(x1 + 34), px(y0));
-          stroke(ctx, '#2563EB', 2.4); seg(ctx, px(x0), px(y0), px(x1), px(y0));
-          /* fins project outward, drawn downwards */
-          const fin = (x, p, a, nm) => {
-            if (p <= 0.001) return;
-            stroke(ctx, CH.ink, 3); seg(ctx, px(x), px(y0), px(x), px(y0 + p * sc));
-            /* the line the manual measures: fin tip to the centre of the opening */
-            stroke(ctx, '#D97706', 1.4, [4, 3]);
-            seg(ctx, x, y0 + p * sc, cx, y0);
-            ctx.setLineDash([]);
-            label(ctx, nm + ' ' + degs(a), x, y0 + p * sc + 13, CH.ink2, FM(10), 'center', 'middle');
-          };
-          ctx.fillStyle = CH.ink; ctx.beginPath(); ctx.arc(cx, y0, 2.4, 0, 7); ctx.fill();
-          /* seen from inside looking out, left is on the left of the drawing.
-             This single-letter prefix is looked up locally rather than
-             through t() — a bare "L"/"R" in the shared dictionary would
-             collide with the same letters used as engineering notation
-             elsewhere (Rf, TL, and the R stat card every assembly editor
-             shows), which is exactly the bug this local map avoids. */
-          const finLetter = side => LANG === 'pt' ? (side === 'L' ? 'E' : 'D') : side;
-          fin(x0, S.finL, aL, finLetter('L'));
-          fin(x1, S.finR, aR, finLetter('R'));
-          label(ctx, t('Plan'), ox + halfW / 2, H - 16, CH.muted, F(10.5, '600'), 'center', 'middle');
-          label(ctx, t('seen from inside looking out'), ox + halfW / 2, H - 30, CH.faint, F(9.5), 'center', 'middle');
-        };
-        drawSection(0);
-        stroke(ctx, CH.line2, 1); seg(ctx, px(halfW), 20, px(halfW), H - 34);
-        drawPlan(halfW);
-      }
-    });
-
-    frag.appendChild(hint('shd-geometry',
-      'The overhang subtends <b>%1</b> and the fins <b>%2</b> and <b>%3</b> — <code>arctan(projection ÷ half the opening)</code>. The manual measures each angle between the plane parallel to the glazing and the line joining the <i>centre</i> of the opening to the tip of the element (§8.4.2 and §8.4.3, Figuras 16 and 17), so the lever arm is half the height for an overhang and half the width for a fin, not the whole of either. The two fins are read from <i>separate</i> tables and their factors multiply (Equation 34): on this orientation the left fin is worth %4 and the right %5 in summer, and swapping them is not a neutral change.',
-      [degs(aO), degs(aL), degs(aR), fmt(ffLS, 2), fmt(ffRS, 2)]));
-
-    /* --- the tables themselves -------------------------------------------- */
-    frag.appendChild(section('Shading factor of a horizontal element', 'Manual SCE Tabelas 54 and 55',
-      'shade-fo', () => csvRows([['Season','Angle'].concat(FO.ori)]
-        .concat(FO.ang.map((a, i) => ['heating', a].concat(FO.win[Z.region === 'madeira' ? 'm' : 'c'][i])))
-        .concat(FO.ang.map((a, i) => ['cooling', a].concat(FO.sum[Z.region === 'madeira' ? 'm' : 'c'][i]))))));
-    const rl = Z.region === 'madeira' ? 'm' : 'c';
-    frag.appendChild(dataTable(['Angle'].concat(FO.ori.map(o => t('Heating') + '<br>' + o))
-      .concat(FO.ori.map(o => t('Cooling') + '<br>' + o)),
-      FO.ang.map((a, i) => [degs(a)].concat(FO.win[rl][i].map(v => fmt(v, 2)))
-        .concat(FO.sum[rl][i].map(v => fmt(v, 2)))), [0]));
-    frag.appendChild(hint('shd-fo-note',
-      'Shown for <b>%1</b>. An overhang on a south wall at 45° takes 45 % of the summer sun and 41 % of the winter sun — it does not discriminate between the seasons nearly as sharply as the geometry suggests it should, because the manual’s angle is a season-average and not a single day. It still discriminates: on a north wall the same overhang takes 3 % in summer and nothing at all in winter.',
-      [t(REGION_NAME[Z.region])]));
-
-    frag.appendChild(section('Shading factor of a vertical element', 'Manual SCE Tabelas 56 and 57',
-      'shade-ff', () => csvRows([['Season','Side','Angle'].concat(FF.ori)]
-        .concat(['win','sum'].flatMap(se => ['L','R'].flatMap(sd =>
-          FF.ang.map((a, i) => [se, sd, a].concat(FF[se][sd][i]))))))));
-    ['L', 'R'].forEach(side => {
-      frag.appendChild(el('h4', { text: t(side === 'L' ? 'Fin on the left' : 'Fin on the right'),
-        style:'margin:16px 0 6px;font-size:12.5px;color:var(--ink2)' }));
-      frag.appendChild(dataTable(['Angle'].concat(FF.ori.map(o => t('Heating') + '<br>' + o))
-        .concat(FF.ori.map(o => t('Cooling') + '<br>' + o)),
-        FF.ang.map((a, i) => ({ cls: null,
-          cells: [degs(a)].concat(FF.win[side][i].map(v => fmt(v, 2)))
-            .concat(FF.sum[side][i].map(v => fmt(v, 2))) })), [0]));
-    });
-    frag.appendChild(hint('shd-ff-note',
-      'Read the two tables against each other on the east and the west. A fin on the <i>right</i> of an east window — the north flank, seen from inside — takes it down to 0,69 in summer; a fin on the left of the same window does nothing at all. On a west window the sides are exactly reversed. This is the asymmetry every symmetric façade ignores, and it is written into the regulation.'));
-
-    /* --- the solar factor ceiling ----------------------------------------- */
     frag.appendChild(section('Solar factor with the device activated', 'Portaria Tabela 8 and Manual SCE Tabela 48'));
     frag.appendChild(controls([
       /* g_tot is the glass and the device together, so the glass has to be
@@ -6630,7 +6472,7 @@ const TABS = [
   { key:'wallsext',  label:'External walls', build:buildWallsExt },
   { key:'wallsint',  label:'Internal walls', build:buildWallsInt },
   { key:'windows',   label:'Windows',        build:buildWindows },
-  { key:'shaders',   label:'Window shaders', build:buildShaders },
+  { key:'shaders',   label:'Window shading', build:buildShaders },
   { key:'iaq',       label:'Indoor air quality', build:buildIAQ }
 ];
 
@@ -7187,7 +7029,8 @@ Object.assign(PT, {
   "Indoor air quality": "Qualidade do ar interior",
   "The envelope keeps heat in or out; the air still has to be replaced. Decreto-Lei n.º {}-D/{} and Portaria n.º {}-I/{} set a minimum on how much — one figure for a dwelling, a calculation for everything else.":
     "A envolvente mantém o calor dentro ou fora; o ar continua a ter de ser renovado. O Decreto-Lei n.º {}-D/{} e a Portaria n.º {}-I/{} fixam um mínimo para essa renovação — um único valor para uma habitação, um cálculo para todo o resto.",
-  "Window shaders": "Sombreamento dos vãos",
+  "Window shading": "Sombreamento dos vãos",
+  "Sun control belongs at the opening: movable and integral shading — roller shutters, adjustable or solid shutters, slatted blinds, awnings and curtains — stops the sun before or inside the glass, and the regulation prices each device with a solar factor read straight from its table. Choose the device, its colour and the glazing behind it, then read the combination against the ceiling the summer zone allows.": "O controlo do sol faz-se no vão: o sombreamento móvel e integral — estores, portadas, venezianas, lonas e cortinas — trava o sol antes ou dentro do vidro, e o regulamento atribui a cada dispositivo um fator solar lido diretamente na sua tabela. Escolha o dispositivo, a cor e o vidro por detrás, e leia a combinação contra o teto que a zona de verão admite.", 
   "The regulation reduces a site to two letters. Everything the rest of this application asks of a roof, a wall or a window follows from them.":
     "A regulamentação reduz um local a duas letras. Tudo o que o resto desta aplicação pede a uma cobertura, a uma parede ou a um vão decorre delas.",
   "The horizontal envelope carries the strictest limit of any opaque element and takes the heaviest summer load of any surface on the building. It is also the one most often built without enough of anything.":
