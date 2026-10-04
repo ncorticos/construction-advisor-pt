@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.27.0',
+  version:     '2.28.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4251,17 +4251,19 @@ function buildIAQ(host) {
         checkCtl(t('Within 5 km of the coast'), V.coastal, v => { V.coastal = v; rerender(); }),
         selectCtl(t('Roughness'), IAQ_ROUGHNESS.map(r => ({ value:r.key, label:t(r.name) })), V.rough,
           v => { V.rough = v; rerender(); }, 520),
-        selectCtl(t('Façade protection'), IAQ_PROTECTION.map(p => ({ value:p.key, label:t(p.name) })), V.protection,
-          v => { V.protection = v; rerender(); }, 360)
+        el('div', { style:'display:flex;align-items:center;gap:10px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:#e9edf1;color:var(--ink2);font-size:12.5px;white-space:nowrap' }, [
+          el('b', { text:'Façade protection' }),
+          el('span', { text:IAQ_PROTECTION.find(p => p.key === V.protection).name }),
+          el('span', { style:'opacity:.65', text:'— from D obs ÷ H obs' }) ])
       ]));
 
       /* Tabela 6 is read on a ratio of two lengths a student measures off a
          site plan and a section, so the two lengths are the input and the
-         class follows from them. Setting the select directly still works and
-         stands until one of these is touched again. */
+         class follows from them — shown greyed above, never set by hand.
+         Coordinates cannot supply either length: they describe one named
+         obstacle facing one facade, not the municipality. */
       const ratio = V.dobs / Math.max(V.hobs, 0.1);
       const ratioClass = protFromRatio(ratio);
-      const overridden = ratioClass !== V.protection;
       frag.appendChild(controls([
         numCtl(t('Distance to the obstacle, D obs'), 0.5, 300, 0.5, V.dobs,
           v => { V.dobs = v; V.protection = protFromRatio(v / Math.max(V.hobs, 0.1)); rerender(); }, 'm'),
@@ -4356,8 +4358,7 @@ function buildIAQ(host) {
         csv: () => csvRows([['Quantity', 'Value', 'Unit']].concat([
           ['D obs', fmt(V.dobs, 1), 'm'], ['H obs', fmt(V.hobs, 1), 'm'],
           ['D obs / H obs', fmt(ratio, 2), '—'],
-          ['Class from the ratio', t(IAQ_PROTECTION.find(p => p.key === ratioClass).name), ''],
-          ['Class in use', t(IAQ_PROTECTION.find(p => p.key === V.protection).name), '']
+          ['Class from the ratio', t(IAQ_PROTECTION.find(p => p.key === ratioClass).name), '']
         ]))
       });
 
@@ -4429,7 +4430,7 @@ function buildIAQ(host) {
       frag.appendChild(hint('iaq-protection-geometry',
         'Manual SCE Tabela 6 reads the shelter of a façade off one ratio: the horizontal distance to the obstacle in front of it, <b>D<sub>obs</sub></b>, over that obstacle’s height, <b>H<sub>obs</sub></b>. Below <b>1,5</b> the façade is protected, between 1,5 and 4 normal, above 4 unprotected — and unprotected is also what you take when there is no obstacle at all or you do not know what is there. This façade reads <b>%1</b>, which is <b>%2</b>.%3<br><br>Note what the ratio does <i>not</i> contain: the height of your own building. A tall building beside a low one is unprotected however close the low one stands, which is why the pressure table stops offering the protected column at all above 50 m — over that height the façade is taken as unprotected whatever this drawing shows.',
         [fmt(ratio, 2), t(IAQ_PROTECTION.find(p => p.key === ratioClass).name),
-         overridden ? ' ' + t('The class selected above differs from the one this ratio gives, so the selection is being used instead.') : '']));
+         '']));
       frag.appendChild(controls([
         numCtl(t('Building height'), 3, 100, 0.5, V.hedif, v => { V.hedif = v; rerender(); }, 'm'),
         segCtl(t('This façade is'), [
@@ -8021,6 +8022,10 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.28.0: locked protection readout. */
+Object.assign(PT, {
+  '— from D obs ÷ H obs': '— de D obs ÷ H obs'
 });
 /* v2.26.0: colour deck. */
 Object.assign(PT, {
