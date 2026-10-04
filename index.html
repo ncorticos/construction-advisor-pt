@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.21.0',
+  version:     '2.22.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -2878,28 +2878,6 @@ function drawHatch(ctx, x, y, w, h) {
   for (let d = -h; d < w + h; d += 8) seg(ctx, px(x + d), y + h, px(x + d + h), y);
   ctx.restore();
 }
-/** A layer whose thickness the student can change: anything but a fixed-thickness product. */
-function layerAdjustable(L) {
-  if (L.air) return true;
-  const M = MAT[L.key];
-  return !(M && M.r !== undefined);
-}
-/* Black nodes on the leading edge of an adjustable band — top edge for a
-   vertical stack, left edge for a horizontal one. */
-function drawLayerNodes(ctx, vertical, rx, ry, rw, rh) {
-  ctx.fillStyle = CH.ink;
-  ctx.strokeStyle = CH.white;
-  ctx.lineWidth = 1.5;
-  const s = 9;
-  const pts = vertical ? [[rx + 2, ry - s / 2], [rx + rw - 2 - s, ry - s / 2]]
-                       : [[rx - s / 2, ry + 2], [rx - s / 2, ry + rh - 2 - s]];
-  pts.forEach(([x, y]) => {
-    ctx.beginPath();
-    ctx.rect(px(x), px(y), s, s);
-    ctx.fill();
-    ctx.stroke();
-  });
-}
 
 /**
  * The editor. `spec` gives the direction of flow, the boundary condition, the
@@ -2985,13 +2963,13 @@ function assemblyEditor(host, spec) {
        'down' is a horizontal element — a roof, a floor — and reads best
        stacked the way it is actually built, top to bottom; heat flowing 'h'
        is a vertical element, a wall, read left to right instead. */
-    if (S.layers.length) { const secPanel = makePanel(wrap, {
+    if (S.layers.length) makePanel(wrap, {
       title: 'Section, to scale',
       note: spec.bc === 'int'
-        ? 'Layer thickness left to right; both faces are inside. Drag a black handle to resize its layer.'
+        ? 'Layer thickness left to right; both faces are inside'
         : spec.flow === 'h'
-        ? 'Layer thickness left to right: outside → inside. Drag a black handle to resize its layer.'
-        : 'Layer thickness top to bottom: outside → inside. Drag a black handle to resize its layer.',
+        ? 'Layer thickness left to right: outside → inside'
+        : 'Layer thickness top to bottom: outside → inside',
       heightFn: w => (spec.flow === 'h' ? 180 : 240) + 56 + sectionLegendLayout(w, S.layers.length).rows * 16 + 10,
       render(ctx, W, H) {
 /* Thickness maps onto the same number of pixels whichever way the
@@ -3034,7 +3012,6 @@ function assemblyEditor(host, spec) {
           if (L.air) drawHatch(ctx, rx, ry, rw, rh);
           stroke(ctx, CH.white, 1.4); ctx.strokeRect(px(rx), px(ry), Math.round(rw), Math.round(rh));
           if (size >= 26) label(ctx, fmt(thick[i] * 1000, 0), rx + rw / 2, ry + rh / 2, contrastOn(col), F(10, '600'), 'center', 'middle');
-          if (layerAdjustable(L)) drawLayerNodes(ctx, vertical, rx, ry, rw, rh);
           pos += size;
         });
         stroke(ctx, CH.line, 1); ctx.strokeRect(px(barX), px(barY), Math.round(barW), Math.round(barH));
@@ -3046,83 +3023,6 @@ function assemblyEditor(host, spec) {
           { cols, colWidth, rowHeight:16 });
       }
     });
-    bindLayerDrag(secPanel);
-    }
-
-    /* Black nodes, Architecture-Advisor style: drag a layer's leading edge to
-       resize it, faster than the number boxes. Repaints live; one rebuild on
-       release syncs table, stats and budget. */
-    function bindLayerDrag(panel) {
-      const cv = panel.canvas;
-      cv.style.touchAction = 'none';
-      const vertical = spec.flow !== 'h';
-      const geom = () => {
-        const W = panel.W;
-        const barY = 34;
-        const barH = vertical ? 240 : 180, barW = vertical ? 180 : 240;
-        const barX = Math.round((W - barW) / 2);
-        const thick = S.layers.map(layerThickness);
-        const total = thick.reduce((a, b) => a + b, 0) || 1;
-        const span = 240;
-        const raw = thick.map(d => Math.max(4, d / total * span));
-        const scale = span / raw.reduce((a, b) => a + b, 0);
-        let pos = vertical ? barY : barX;
-        return S.layers.map((L, i) => {
-          const size = raw[i] * scale;
-          const rx = vertical ? barX : pos, ry = vertical ? pos : barY;
-          const rw = vertical ? barW : size, rh = vertical ? size : barH;
-          pos += size;
-          return { i, rx, ry, rw, rh, adjustable:layerAdjustable(L) };
-        });
-      };
-      const toLocal = ev => {
-        const r = cv.getBoundingClientRect();
-        return [(ev.clientX - r.left) * (r.width ? panel.W / r.width : 1),
-                (ev.clientY - r.top) * (r.height ? panel.H / r.height : 1)];
-      };
-      const nodeAt = (x, y) => {
-        for (const b of geom()) {
-          if (!b.adjustable) continue;
-          if (vertical) {
-            if (Math.abs(y - b.ry) > 11) continue;
-            if (Math.abs(x - (b.rx + 6.5)) <= 11 || Math.abs(x - (b.rx + b.rw - 6.5)) <= 11) return b.i;
-          } else {
-            if (Math.abs(x - b.rx) > 11) continue;
-            if (Math.abs(y - (b.ry + 6.5)) <= 11 || Math.abs(y - (b.ry + b.rh - 6.5)) <= 11) return b.i;
-          }
-        }
-        return null;
-      };
-      let grab = null;
-      cv.addEventListener('pointerdown', ev => {
-        const [x, y] = toLocal(ev);
-        const i = nodeAt(x, y);
-        if (i === null) return;
-        ev.preventDefault();
-        const thick = S.layers.map(layerThickness);
-        const total = thick.reduce((a, b) => a + b, 0) || 1;
-        grab = { i, x0:x, y0:y, d0:thick[i], ppu:240 / total };
-        try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
-        cv.style.cursor = vertical ? 'ns-resize' : 'ew-resize';
-      });
-      cv.addEventListener('pointermove', ev => {
-        const [x, y] = toLocal(ev);
-        if (!grab) {
-          cv.style.cursor = nodeAt(x, y) === null ? '' : (vertical ? 'ns-resize' : 'ew-resize');
-          return;
-        }
-        ev.preventDefault();
-        const delta = vertical ? (y - grab.y0) : (x - grab.x0);
-        const v = Math.min(1.5, Math.max(0.005, Math.round((grab.d0 + delta / grab.ppu) * 200) / 200));
-        if (v !== S.layers[grab.i].d) {
-          S.layers[grab.i].d = v;
-          panel.draw();
-        }
-      });
-      const dropLayer = () => { if (!grab) return; grab = null; cv.style.cursor = ''; render(); };
-      cv.addEventListener('pointerup', dropLayer);
-      cv.addEventListener('pointercancel', dropLayer);
-    }
 
     /* --- the result ------------------------------------------------------ */
     const lim = spec.limit;
@@ -4973,9 +4873,161 @@ function glossBind(root) {
  * up and continue" actually needs to be reliable; a Markdown export could
  * describe the assessment but could not be read back into it.
  */
+/* Tabela 48 devices, minus roller shutters: the tab covers blinds, shutters,
+   awnings and curtains, never fixed overhangs or fins. s/d hold g tot,vc on
+   single/double ordinary glass per colour band (null = not tabulated); op
+   marks the opaque devices the product rule of Eq. 21 to 23 stops at. */
+const SHD2_DEV = [
+  { key:'evenm', pos:'ext', op:0, group:'External devices', name:'Venetian blind, timber slats', s:[0.11,0.11,0.11], d:[0.08,0.08,0.08] },
+  { key:'evenmt', pos:'ext', op:0, group:'External devices', name:'Venetian blind, metal slats', s:[0.14,0.14,0.14], d:[0.09,0.09,0.09] },
+  { key:'elonat', pos:'ext', op:0, group:'External devices', name:'Awning, very transparent', s:[0.21,0.23,0.25], d:[0.16,0.18,0.20] },
+  { key:'elonao', pos:'ext', op:0, group:'External devices', name:'Awning, opaque', s:[0.07,0.09,0.12], d:[0.04,0.06,0.08] },
+  { key:'elonap', pos:'ext', op:0, group:'External devices', name:'Awning, slightly transparent', s:[0.14,0.17,0.19], d:[0.10,0.12,0.14] },
+  { key:'eportf', pos:'ext', op:0, group:'External devices', name:'Shutter, fixed louvres', s:[0.14,0.14,0.14], d:[0.09,0.09,0.09] },
+  { key:'eportr', pos:'ext', op:1, group:'External devices', name:'Shutter, adjustable louvres', s:[0.07,0.10,0.13], d:[0.04,0.07,0.09] },
+  { key:'eporto', pos:'ext', op:1, group:'External devices', name:'Shutter, solid', s:[0.04,0.07,0.09], d:[0.03,0.05,0.06] },
+  { key:'mvenez', pos:'mid', op:0, group:'Between the panes', name:'Venetian blind, thin slats', s:[null,null,null], d:[0.28,0.34,0.40] },
+  { key:'icortl', pos:'int', op:0, group:'Internal devices', name:'Curtain, slightly transparent', s:[0.36,0.46,0.56], d:[0.38,0.47,0.56] },
+  { key:'icortm', pos:'int', op:0, group:'Internal devices', name:'Curtain, very transparent', s:[0.70,null,null], d:[0.63,null,null] },
+  { key:'icorto', pos:'int', op:1, group:'Internal devices', name:'Curtain, opaque', s:[0.33,0.44,0.54], d:[0.37,0.46,0.55] },
+  { key:'icortt', pos:'int', op:0, group:'Internal devices', name:'Curtain, transparent', s:[0.38,0.48,0.58], d:[0.39,0.48,0.58] },
+  { key:'ivenez', pos:'int', op:0, group:'Internal devices', name:'Slatted blind', s:[0.45,0.56,0.65], d:[0.47,0.59,0.69] },
+  { key:'iportf', pos:'int', op:0, group:'Internal devices', name:'Shutter, fixed louvres', s:[0.45,0.56,0.65], d:[0.47,0.59,0.69] },
+  { key:'iportr', pos:'int', op:1, group:'Internal devices', name:'Shutter, adjustable louvres', s:[0.35,0.45,0.57], d:[0.40,0.55,0.65] },
+  { key:'iporto', pos:'int', op:1, group:'Internal devices', name:'Shutter, solid', s:[0.30,0.40,0.50], d:[0.35,0.46,0.58] }
+];
+const SHD2_STATE = { devs:['eporto'], colour:'media', inertia:'media', dbl:true, glaz:0 };
+/** The admissible solar factor with the shading fully activated, Tabela 8. */
+const gtotMax = (Z, inertia) => PORTARIA.gtot[inertia === 'fraca' ? 'weak' : 'heavy'][Z.si];
+function buildShading(host) {
+  const Z = STATE.zone;
+  pageHead(host, 'Solar protections',
+    'Some openings need help against the summer sun: blinds, shutters, awnings and curtains overlapping the glazing, each with a solar factor the regulation tabulates. Tick the devices fitted on the opening — the law counts them from outside inwards and stops at the first opaque one — and read what the combination lets through against the ceiling the summer zone allows.');
+  rebuildable(host, (frag, rerender) => {
+    const S = SHD2_STATE;
+    const G = GLAZING[clamp(S.glaz, 0, GLAZING.length - 1)];
+    const ref = S.dbl ? 0.75 : 0.85;
+    const ci = COLOURS.findIndex(c => c.key === S.colour);
+    const act = SHD2_DEV.filter(d => S.devs.includes(d.key));
+    const rows = act.map((d, k) => ({ d, n:k + 1, v:d[S.dbl ? 'd' : 's'][ci] }));
+    const opAt = rows.findIndex(r => r.d.op);
+    const counted = opAt < 0 ? rows : rows.slice(0, opAt + 1);
+    const missing = counted.filter(r => r.v === null || r.v === undefined);
+    let ord = 1;
+    counted.forEach(r => { if (r.v !== null && r.v !== undefined) { ord *= r.v / ref; r.part = ord; } });
+    const gt = missing.length ? null : G.g * ord;
+    const limG = gtotMax(Z, S.inertia);
+    frag.appendChild(controls([
+      selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
+        value:String(i),
+        label:t(GLAZ_FAMILY[p.f].name) + ' — U ' + fmt(p.ug, 1) + ', TL ' + p.tl + ' %, g ' + fmt(p.g, 2)
+      })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
+      selectCtl(t('Colour of the devices'), COLOURS.map(c => ({ value:c.key, label:t(c.name) })),
+        S.colour, v => { S.colour = v; rerender(); }),
+      checkCtl(t('Double glazing'), S.dbl, v => { S.dbl = v; rerender(); }),
+      el('div', { class:'divider' }),
+      segCtl(t('Inertia of the space'), [
+        { value:'fraca', label:t('Weak') }, { value:'media', label:t('Medium or strong') }
+      ], S.inertia, v => { S.inertia = v; rerender(); })
+    ]));
+    ['ext', 'mid', 'int'].forEach(pos => {
+      const grp = SHD2_DEV.filter(d => d.pos === pos);
+      frag.appendChild(el('h4', { text:t(pos === 'ext' ? 'External devices' : pos === 'mid' ? 'Between the panes' : 'Internal devices'),
+        style:'margin:16px 0 6px;font-size:12.5px;color:var(--ink2)' }));
+      const box = el('div', { style:'display:flex;flex-wrap:wrap;gap:4px 18px;margin-bottom:4px' });
+      grp.forEach(d => box.appendChild(checkCtl(t(d.name), S.devs.includes(d.key),
+        v => { S.devs = v ? S.devs.concat([d.key]) : S.devs.filter(k => k !== d.key); rerender(); })));
+      frag.appendChild(box);
+    });
+    if (missing.length) {
+      frag.appendChild(el('div', { class:'warn',
+        text:t('The manual does not tabulate this device in this colour and glazing combination.') }));
+    } else {
+      frag.appendChild(stats([
+        statCard('Glass g perp,vi', fmt(G.g, 2), null, t('Perpendicular incidence')),
+        statCard('Combined g tot', fmt(gt, 2), null, t('Devices counted outside in')),
+        statCard('g tot,max', fmt(limG, 2), null, Z.sz + ' · ' + t(S.inertia === 'fraca' ? 'weak inertia' : 'medium or strong inertia'))
+      ]));
+      frag.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html: verdict(gt, limG) }),
+        el('span', { html:'<code>g tot = g perp,vi' + (counted.length ? ' × ' + counted.map(r => '(' + fmt(r.v, 2) + '÷' + fmt(ref, 2) + ')').join(' × ') : ' (' + t('no device ticked') + ')')
+          + ' = <b>' + fmt(gt, 2) + '</b></code>' }),
+        opAt >= 0 ? el('span', { html:'<span class="pill ok">' + t('First opaque device stops the count') + '</span>' }) : null
+      ]));
+    }
+    makePanel(frag, {
+      title:'The opening in section', note:'Outside left, inside right — one band per ticked device',
+      aspect:3.2,
+      render(ctx, W, H) {
+        const seq = [];
+        act.filter(d => d.pos === 'ext').forEach(d => seq.push({ d, glass:false }));
+        seq.push({ glass:true });
+        act.filter(d => d.pos === 'int').forEach(d => seq.push({ d, glass:false }));
+        const hasMid = act.some(d => d.pos === 'mid');
+        const md = hasMid ? act.find(d => d.pos === 'mid') : null;
+        const mdRec = md ? rows.find(r => r.d === md) : null;
+        const gw = 26, dw = 14, gap = 6;
+        let tw = 0;
+        seq.forEach(s => { tw += (s.glass ? (hasMid ? gw + dw : gw) : dw) + gap; });
+        tw -= gap;
+        let x = Math.round((W - tw) / 2);
+        const y0 = 26, bh = H - y0 - 34;
+        const midY = y0 + bh / 2;
+        const paintDev = (bx, bw, d, rec) => {
+          const sh = !!rec && opAt >= 0 && rows.indexOf(rec) > opAt;
+          if (sh) ctx.globalAlpha = 0.35;
+          if (d.op) { ctx.fillStyle = CH.ink; ctx.fillRect(bx, y0, bw, bh); }
+          else { ctx.fillStyle = '#ffffff'; ctx.fillRect(bx, y0, bw, bh); drawHatch(ctx, bx, y0, bw, bh); }
+          ctx.globalAlpha = 1;
+          stroke(ctx, CH.ink2, 1.2); ctx.strokeRect(px(bx), px(y0), Math.round(bw), Math.round(bh));
+          if (rec) label(ctx, String(rec.n), bx + bw / 2, midY, d.op && !sh ? CH.white : CH.ink, F(10, '600'), 'center', 'middle');
+        };
+        label(ctx, t('Outside'), Math.max(8, x - 10), midY, CH.muted, F(10, '600'), 'right', 'middle');
+        seq.forEach(s => {
+          const w = s.glass ? (hasMid ? gw + dw : gw) : dw;
+          if (s.glass) {
+            ctx.fillStyle = '#c9d8e8';
+            ctx.fillRect(x, y0, w, bh);
+            stroke(ctx, CH.ink2, 1.2); ctx.strokeRect(px(x), px(y0), Math.round(w), Math.round(bh));
+            if (hasMid) paintDev(x + (w - dw) / 2, dw, md, mdRec);
+          } else {
+            paintDev(x, w, s.d, rows.find(r => r.d === s.d));
+          }
+          x += w + gap;
+        });
+        label(ctx, t('Inside'), Math.min(W - 8, x - gap + 10), midY, CH.muted, F(10, '600'), 'left', 'middle');
+      },
+      csv: () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot']]
+        .concat(rows.map(r => [r.n, r.d.name, r.d.group, r.d.op ? 'yes' : 'no',
+          (r.v === null || r.v === undefined) ? '' : +r.v.toFixed(3),
+          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3))])))
+    });
+    frag.appendChild(section('The combination, device by device',
+      t('Ordinary glass, this colour, on this glazing'), 'shading-combination',
+      () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot']]
+        .concat(rows.map(r => [r.n, r.d.name, r.d.group, r.d.op ? 'yes' : 'no',
+          (r.v === null || r.v === undefined) ? '' : +r.v.toFixed(3),
+          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3))])))));
+    frag.appendChild(dataTable(
+      ['#', 'Device', 'Where', 'Opaque', 'g tot,vc', 'running g tot', ''],
+      rows.map(r => {
+        const shadowed = opAt >= 0 && rows.indexOf(r) > opAt;
+        const noval = r.v === null || r.v === undefined;
+        return { cls: shadowed ? null : (noval ? null : (G.g * r.part <= limG ? 'total' : null)),
+          cells: [r.n, t(r.d.name), t(r.d.group), r.d.op ? t('yes') : t('no'),
+            noval ? '–' : fmt(r.v, 2),
+            (r.part === undefined || noval) ? '–' : fmt(G.g * r.part, 2),
+            noval ? '<span class="pill bad">' + t('no value') + '</span>'
+              : shadowed ? '<span class="pill empty">' + t('in shadow') + '</span>'
+              : '<span class="pill ok">' + t('counts') + '</span>'] };
+      }), [0, 1, 2, 6]));
+    frag.appendChild(hint('shd2-rule',
+      'Devices are counted from outside inwards up to and including the first opaque one — everything behind it is in shadow and adds nothing (Manual SCE Eq. 21 to 23). The column follows the colour of the devices, on the same three bands as Tabela 20; an exterior device beats any interior one because glass stops light but only something outside the glass stops heat before it arrives.'));
+  });
+}
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
-  FLR_STATE, WIN_STATE, IAQ_STATE, IAQ_VENT_STATE
+  FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE
 };
 
 /* A pristine copy of every state object, taken once at load, before a
@@ -6438,6 +6490,7 @@ const TABS = [
   { key:'wallsext',  label:'External walls', build:buildWallsExt },
   { key:'wallsint',  label:'Internal walls', build:buildWallsInt },
   { key:'windows',   label:'Windows',        build:buildWindows },
+  { key:'shading',   label:'Solar protections', build:buildShading },
   { key:'iaq',       label:'Indoor air quality', build:buildIAQ }
 ];
 
@@ -7156,11 +7209,8 @@ Object.assign(PT, {
   "Air": "Ar",
   "Section, to scale": "Secção, à escala",
   "Layer thickness left to right: outside → inside": "Espessura das camadas, da esquerda para a direita: exterior → interior",
-  "Layer thickness left to right: outside → inside. Drag a black handle to resize its layer.": "Espessura das camadas, da esquerda para a direita: exterior → interior. Arraste um ponto preto para redimensionar a camada.",
   "Layer thickness top to bottom: outside → inside": "Espessura das camadas, de cima para baixo: exterior → interior",
-  "Layer thickness top to bottom: outside → inside. Drag a black handle to resize its layer.": "Espessura das camadas, de cima para baixo: exterior → interior. Arraste um ponto preto para redimensionar a camada.",
   "Layer thickness left to right; both faces are inside": "Espessura das camadas, da esquerda para a direita; ambas as faces são interiores",
-  "Layer thickness left to right; both faces are inside. Drag a black handle to resize its layer.": "Espessura das camadas, da esquerda para a direita; ambas as faces são interiores. Arraste um ponto preto para redimensionar a camada.",
   "Outside": "Exterior",
   "Inside": "Interior",
   "One face": "Uma face",
@@ -7806,6 +7856,60 @@ Object.assign(PT, {
 PT_HINT['sup-dir'] =
   'Um diretório, não um mercado: cada entrada abaixo foi verificada — produtores fabricam, distribuidores armazenam. Tudo o que não tenha entrada verificada é listado no fim como em falta em vez de ser inventado. Confirmar distribuidores junto ao local antes de especificar.';
 
+Object.assign(PT_HINT, {
+  'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.22.0: English–Portuguese for solar protections. */
+Object.assign(PT, {
+  'Solar protections': 'Proteções solares',
+  'Double glazing': 'Vidro duplo',
+  'Inertia of the space': 'Inércia do espaço',
+  'g tot,máx': 'g tot,máx',
+  'weak inertia': 'inércia fraca',
+  'medium or strong inertia': 'inércia média ou forte',
+  'External devices': 'Dispositivos exteriores',
+  'Internal devices': 'Dispositivos interiores',
+  'Between the panes': 'Entre os vidros',
+  'Perpendicular incidence': 'Incidência perpendicular',
+  'The manual does not tabulate this device in this colour and glazing combination.': 'O manual não tabela este dispositivo nesta cor e envidraçamento.',
+  'Outside': 'Exterior',
+  'Inside': 'Interior',
+  'Some openings need help against the summer sun: blinds, shutters, awnings and curtains overlapping the glazing, each with a solar factor the regulation tabulates. Tick the devices fitted on the opening — the law counts them from outside inwards and stops at the first opaque one — and read what the combination lets through against the ceiling the summer zone allows.': 'Alguns vãos precisam de ajuda contra o sol de Verão: estores, portadas, venezianas, toldos e cortinas sobre o vidro, cada um com um fator solar que o regulamento tabela. Marque os dispositivos aplicados no vão — a lei conta-os de fora para dentro e para no primeiro opaco — e leia o que a combinação deixa passar contra o teto que a zona de Verão admite.',
+  'Colour of the devices': 'Cor dos dispositivos',
+  'External devices': 'Dispositivos exteriores',
+  'Internal devices': 'Dispositivos interiores',
+  'Between the panes': 'Entre os vidros',
+  'no device ticked': 'nenhum dispositivo marcado',
+  'First opaque device stops the count': 'O primeiro dispositivo opaco trava a contagem',
+  'Glass g perp,vi': 'Vidro g perp,vi',
+  'Combined g tot': 'g tot combinado',
+  'Devices counted outside in': 'Dispositivos contados de fora para dentro',
+  'The opening in section': 'O vão em corte',
+  'Outside left, inside right — one band per ticked device': 'Exterior à esquerda, interior à direita — uma banda por dispositivo marcado',
+  'The combination, device by device': 'A combinação, dispositivo a dispositivo',
+  'Ordinary glass, this colour, on this glazing': 'Vidro corrente, esta cor, neste vidro',
+  'opaque': 'opaca',
+  'in shadow': 'em sombra',
+  'counts': 'conta',
+  'no value': 'sem valor',
+  'running g tot': 'g tot acumulado',
+    'Venetian blind, timber slats': 'Estore veneziano de lâminas de madeira',
+  'Venetian blind, metal slats': 'Estore veneziano de lâminas metálicas',
+  'Awning, very transparent': 'Lona muito transparente',
+  'Awning, opaque': 'Lona opaca',
+  'Awning, slightly transparent': 'Lona pouco transparente',
+  'Shutter, fixed louvres': 'Portada de lâminas fixas',
+  'Shutter, adjustable louvres': 'Portada de lâminas reguláveis',
+  'Shutter, solid': 'Portada opaca',
+  'Curtain, slightly transparent': 'Cortina ligeiramente transparente',
+  'Curtain, very transparent': 'Cortina muito transparente',
+  'Curtain, opaque': 'Cortina opaca',
+  'Curtain, transparent': 'Cortina transparente',
+  'Slatted blind': 'Estore de lâminas',
+  'yes': 'sim',
+  'no': 'não',
+  'Venetian blind, thin slats': 'Estore veneziano de lâminas delgadas'
+});
 /* v2.7.0: English–Portuguese for the photo editor. */
 Object.assign(PT, {
   'Edit photos': 'Editar fotografias',
