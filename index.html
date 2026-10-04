@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.20.0',
+  version:     '2.20.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4287,7 +4287,7 @@ function buildIAQ(host) {
           // the stats and hints below were built from
           const ratio = V.dobs / Math.max(V.hobs, 0.1);
           const ratioClass = protFromRatio(ratio);
-          const { P } = facadeGeom(W, H);
+          const { P, xMin, xMax, hi } = facadeGeom(W, H);
 
           // ground
           stroke(ctx, CH.ink2, 1.4);
