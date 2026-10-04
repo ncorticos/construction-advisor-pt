@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.24.0',
+  version:     '2.25.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5132,6 +5132,24 @@ function buildShading(host) {
       'Indicative cost of this stack ≈ <b>%1 EUR/m2</b> of opening — the layers above, added up. Estimates from the CYPE price generator (Portugal, new build): LSN blinds, LST awnings, LSV shutters, LSC curtains.', [stackCost]));
     frag.appendChild(hint('shd2-rule',
       'Devices are counted from outside inwards up to and including the first opaque one — everything behind it is in shadow and adds nothing (Manual SCE Eq. 21 to 23). The column follows the colour of the devices, on the same three bands as Tabela 20; an exterior device beats any interior one because glass stops light but only something outside the glass stops heat before it arrives.'));
+    frag.appendChild(section('Grand total — shading over the windows',
+      t('The two result lines of the opening, and the total the Manual asks for'), 'shading-total',
+      () => csvRows([['line', 'value'],
+        ['Combined g tot', gt === null ? '' : +gt.toFixed(3)],
+        ['Stack cost EUR/m2', stackCost],
+        ['g tot,max', +limG.toFixed(3)],
+        ['Passes (g tot <= g tot,max)', gt === null ? '' : (gt <= limG ? 'yes' : 'no')]])));
+    if (!missing.length) {
+      frag.appendChild(stats([
+        statCard('Combined g tot', fmt(gt, 2), null, t('Devices counted outside in')),
+        statCard('Stack cost', '~' + stackCost + ' EUR/m2', null, t('CYPE price generator'))
+      ], 2));
+      frag.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html:'<b>' + t('TOTAL under the SCE Manual') + '</b> (Eq. 21–23 · Tabela 8): g tot = <b>'
+          + fmt(gt, 2) + '</b>, g tot,max = <b>' + fmt(limG, 2) + '</b>' }),
+        el('span', { html: verdict(gt, limG) })
+      ]));
+    }
   });
 }
 const STATE_REGISTRY = {
@@ -7967,6 +7985,14 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.25.0: grand total. */
+Object.assign(PT, {
+  'Grand total — shading over the windows': 'Total global — sombreamento dos vãos',
+  'The two result lines of the opening, and the total the Manual asks for': 'As duas linhas de resultado do vão, e o total que o Manual exige',
+  'Stack cost': 'Custo da combinação',
+  'CYPE price generator': 'Gerador de Preços CYPE',
+  'TOTAL under the SCE Manual': 'TOTAL segundo o Manual SCE'
 });
 /* v2.23.0: twin elevations. */
 Object.assign(PT, {
