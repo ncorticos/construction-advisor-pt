@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.25.0',
+  version:     '2.26.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5018,14 +5018,24 @@ function buildShading(host) {
           (r.part === undefined ? '' : +(G.g * r.part).toFixed(3)), SHD2_PRICE[r.d.key].eur])))
     });
     makePanel(frag, {
-      title:'The window in elevation', note:'Exterior left, interior right — ticked devices drawn closed over the opening',
+      title:'The window in elevation', note:'Exterior left, interior right — ticked devices drawn closed over the opening, translucent so the layers behind show through',
       aspect:2.4,
       render(ctx, W, H) {
         const ext = act.filter(d => d.pos === 'ext');
         const inn = act.filter(d => d.pos === 'int');
         const mid = act.find(d => d.pos === 'mid');
         const halfW = W / 2;
-        const ww = Math.min(190, halfW - 70), wh = Math.min(250, H - 80);
+        const FAM = {
+          ven:  { fill:'rgba(198,158,96,0.42)' },
+          elon: { fill:'rgba(216,124,66,0.42)' },
+          louv: { fill:'rgba(148,163,178,0.42)' },
+          sol:  { fill:'rgba(38,44,52,0.55)' },
+          cort: { fill:'rgba(147,183,226,0.42)' }
+        };
+        const famOf = (d) => /ven/.test(d.key) ? 'ven' : /^elon/.test(d.key) ? 'elon'
+          : /portf|portr/.test(d.key) ? 'louv' : /porto/.test(d.key) ? 'sol' : 'cort';
+        const leg = W > 640;
+        const ww = Math.min(190, halfW - 70), wh = Math.min(230, H - (leg ? 118 : 80));
         const y0 = 34;
         const slats = (bx, by, y1, y2, step) => {
           stroke(ctx, CH.ink2, 1);
@@ -5034,33 +5044,33 @@ function buildShading(host) {
         const paint = (d, bx, by, rec) => {
           const k = d.key;
           if (/ven/.test(k)) {
-            if (d.op) ctx.fillStyle = CH.ink; else ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillStyle = FAM.ven.fill;
             ctx.fillRect(bx, by, ww, wh);
             slats(bx, by, by + 4, by + wh - 2, 7);
           } else if (/^elon/.test(k)) {
-            ctx.fillStyle = d.op ? CH.ink : 'rgba(255,255,255,0.6)';
+            ctx.fillStyle = FAM.elon.fill;
             ctx.fillRect(bx, by, ww, 24);
             for (let fx = bx + 6; fx < bx + ww; fx += 10) seg(ctx, px(fx), px(by), px(fx), px(by + 24));
             stroke(ctx, CH.ink2, 1.6);
             seg(ctx, px(bx), px(by + 24), px(bx - 12), px(by + 44));
             seg(ctx, px(bx + ww), px(by + 24), px(bx + ww + 12), px(by + 44));
           } else if (/portf/.test(k)) {
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillStyle = FAM.louv.fill;
             ctx.fillRect(bx, by, ww, wh);
             slats(bx, by, by + 4, by + wh - 2, 6);
             ctx.fillStyle = CH.ink2;
             ctx.fillRect(bx, by, 7, wh); ctx.fillRect(bx + ww - 7, by, 7, wh);
           } else if (/portr/.test(k)) {
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillStyle = FAM.louv.fill;
             ctx.fillRect(bx, by, ww, wh);
             slats(bx, by, by + 12, by + wh - 12, 6);
             ctx.fillStyle = CH.ink2;
             ctx.fillRect(bx, by, ww, 9); ctx.fillRect(bx, by + wh - 9, ww, 9);
           } else if (/porto/.test(k)) {
-            ctx.fillStyle = CH.ink;
+            ctx.fillStyle = FAM.sol.fill;
             ctx.fillRect(bx, by, ww, wh);
           } else if (/^icort/.test(k)) {
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillStyle = FAM.cort.fill;
             ctx.fillRect(bx, by, ww, wh);
             stroke(ctx, CH.ink2, 1);
             for (let fx = bx + 5; fx < bx + ww; fx += 9) seg(ctx, px(fx), px(by), px(fx), px(by + wh));
@@ -5092,14 +5102,39 @@ function buildShading(host) {
             const bx = x0 + k * 7, by = y0 + k * 7;
             paint(d, bx, by, rec);
             if (rec) {
-              const ny = /^elon/.test(d.key) ? by + 12 : by + wh / 2;
-              nums.push([rec.n, bx + ww / 2, ny, d.op && !sh ? CH.white : CH.ink]);
+              const fam = famOf(d);
+              nums.push([rec.n, bx + 14, by + 22 + k * 18,
+                fam === 'sol' ? CH.white : CH.ink, fam === 'sol' ? CH.ink : '#ffffff']);
             }
             ctx.globalAlpha = 1;
           });
-          nums.forEach(a => label(ctx, String(a[0]), a[1], a[2], a[3], F(10, '600'), 'center', 'middle'));
+          nums.forEach(a => {
+            ctx.font = F(10, '600'); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.lineWidth = 3; ctx.strokeStyle = a[4];
+            ctx.strokeText(String(a[0]), a[1], a[2]);
+            ctx.fillStyle = a[3]; ctx.fillText(String(a[0]), a[1], a[2]);
+          });
           label(ctx, t(tag), cx, y0 + wh + 40, CH.muted, F(10, '600'), 'center', 'middle');
         };
+        if (leg) {
+          const items = [['ven', 'Slatted blind'], ['elon', 'Awning'], ['louv', 'Louvred shutter'],
+            ['sol', 'Solid shutter'], ['cort', 'Curtain']];
+          ctx.font = F(9, '500'); ctx.textBaseline = 'middle';
+          const gapL = 16, chipW = 12;
+          let totL = 0;
+          items.forEach(it => { totL += chipW + 5 + ctx.measureText(t(it[1])).width + gapL; });
+          totL -= gapL;
+          let lx = (W - totL) / 2;
+          const ly = y0 + wh + 62;
+          items.forEach(it => {
+            ctx.fillStyle = FAM[it[0]].fill;
+            ctx.fillRect(lx, ly - 5, chipW, 10);
+            stroke(ctx, CH.ink2, 1); ctx.strokeRect(px(lx), px(ly - 5), chipW, 10);
+            ctx.fillStyle = CH.ink2; ctx.textAlign = 'left';
+            ctx.fillText(t(it[1]), lx + chipW + 5, ly);
+            lx += chipW + 5 + ctx.measureText(t(it[1])).width + gapL;
+          });
+        }
         drawWin(halfW / 2, ext.concat(mid ? [mid] : []), 'Outside', true);
         drawWin(halfW + halfW / 2, (mid ? [mid] : []).concat(inn), 'Inside', false);
         stroke(ctx, CH.line2, 1);
@@ -7986,6 +8021,14 @@ PT_HINT['sup-dir'] =
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
 });
+/* v2.26.0: colour deck. */
+Object.assign(PT, {
+  'Slatted blind': 'Estore de lâminas',
+  'Awning': 'Lona',
+  'Louvred shutter': 'Portada de lâminas',
+  'Solid shutter': 'Portada opaca',
+  'Curtain': 'Cortinado'
+});
 /* v2.25.0: grand total. */
 Object.assign(PT, {
   'Grand total — shading over the windows': 'Total global — sombreamento dos vãos',
@@ -7997,7 +8040,7 @@ Object.assign(PT, {
 /* v2.23.0: twin elevations. */
 Object.assign(PT, {
   'The window in elevation': 'O vão em alçado',
-  'Exterior left, interior right — ticked devices drawn closed over the opening': 'Exterior à esquerda, interior à direita — dispositivos marcados desenhados fechados sobre o vão'
+  'Exterior left, interior right — ticked devices drawn closed over the opening, translucent so the layers behind show through': 'Exterior à esquerda, interior à direita — dispositivos marcados desenhados fechados sobre o vão, translúcidos para se verem as camadas de trás'
 });
 /* v2.22.0: English–Portuguese for solar protections. */
 Object.assign(PT, {
