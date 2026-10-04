@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.23.0',
+  version:     '2.24.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4896,6 +4896,21 @@ const SHD2_DEV = [
   { key:'iportr', pos:'int', op:1, group:'Internal devices', name:'Shutter, adjustable louvres', s:[0.35,0.45,0.57], d:[0.40,0.55,0.65] },
   { key:'iporto', pos:'int', op:1, group:'Internal devices', name:'Shutter, solid', s:[0.30,0.40,0.50], d:[0.35,0.46,0.58] }
 ];
+/* Indicative installed EUR/m2, converted from CYPE Gerador de Precos
+   (Portugal, obra nova) base units: LSN010 384,62E/0,6m2, LST010 534,82E/3,8m2,
+   LSV alu 143,55E/0,75m2, LSV madeira 198,76E/0,64m2, LSV PVC 139,73E/0,18m2,
+   LSV correr 301E/m2, LSN int 166,64E/0,6m2, LSC termica 44,19E/2,1m2,
+   LSC porta 104,98E/2,1m2. Order of magnitude only: motorisation, colour and
+   normal window sizes move the figure (small base units inflate Ud->m2). */
+const SHD2_PRICE = {
+  evenm:{eur:640,ref:'LSN010'}, evenmt:{eur:640,ref:'LSN010'},
+  elonat:{eur:140,ref:'LST010'}, elonao:{eur:140,ref:'LST010'}, elonap:{eur:140,ref:'LST010'},
+  eportf:{eur:190,ref:'LSV'}, eportr:{eur:190,ref:'LSV'}, eporto:{eur:310,ref:'LSV'},
+  mvenez:{eur:280,ref:'LSN'}, ivenez:{eur:280,ref:'LSN'},
+  iportf:{eur:780,ref:'LSV*'}, iportr:{eur:280,ref:'LSN'}, iporto:{eur:310,ref:'LSV'},
+  icortl:{eur:50,ref:'LSC'}, icortm:{eur:50,ref:'LSC'},
+  icorto:{eur:20,ref:'LSC'}, icortt:{eur:20,ref:'LSC'}
+};
 const SHD2_STATE = { devs:['eporto'], colour:'media', inertia:'media', dbl:true, glaz:0 };
 /** The admissible solar factor with the shading fully activated, Tabela 8. */
 const gtotMax = (Z, inertia) => PORTARIA.gtot[inertia === 'fraca' ? 'weak' : 'heavy'][Z.si];
@@ -4997,10 +5012,10 @@ function buildShading(host) {
         });
         label(ctx, t('Inside'), Math.min(W - 8, x - gap + 10), midY, CH.muted, F(10, '600'), 'left', 'middle');
       },
-      csv: () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot']]
+      csv: () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot','eur/m2 est']]
         .concat(rows.map(r => [r.n, r.d.name, r.d.group, r.d.op ? 'yes' : 'no',
           (r.v === null || r.v === undefined) ? '' : +r.v.toFixed(3),
-          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3))])))
+          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3)), SHD2_PRICE[r.d.key].eur])))
     });
     makePanel(frag, {
       title:'The window in elevation', note:'Exterior left, interior right — ticked devices drawn closed over the opening',
@@ -5093,12 +5108,12 @@ function buildShading(host) {
     });
     frag.appendChild(section('The combination, device by device',
       t('Ordinary glass, this colour, on this glazing'), 'shading-combination',
-      () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot']]
+      () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot','eur/m2 est']]
         .concat(rows.map(r => [r.n, r.d.name, r.d.group, r.d.op ? 'yes' : 'no',
           (r.v === null || r.v === undefined) ? '' : +r.v.toFixed(3),
-          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3))])))));
+          (r.part === undefined ? '' : +(G.g * r.part).toFixed(3)), SHD2_PRICE[r.d.key].eur])))));
     frag.appendChild(dataTable(
-      ['#', 'Device', 'Where', 'Opaque', 'g tot,vc', 'running g tot', ''],
+      ['#', 'Device', 'Where', 'Opaque', 'g tot,vc', 'running g tot', 'EUR/m2 est.', ''],
       rows.map(r => {
         const shadowed = opAt >= 0 && rows.indexOf(r) > opAt;
         const noval = r.v === null || r.v === undefined;
@@ -5106,10 +5121,15 @@ function buildShading(host) {
           cells: [r.n, t(r.d.name), t(r.d.group), r.d.op ? t('yes') : t('no'),
             noval ? '–' : fmt(r.v, 2),
             (r.part === undefined || noval) ? '–' : fmt(G.g * r.part, 2),
+            '~' + SHD2_PRICE[r.d.key].eur + ' EUR/m2',
             noval ? '<span class="pill bad">' + t('no value') + '</span>'
               : shadowed ? '<span class="pill empty">' + t('in shadow') + '</span>'
               : '<span class="pill ok">' + t('counts') + '</span>'] };
-      }), [0, 1, 2, 6]));
+      }), [0, 1, 2, 7]));
+    PT_HINT['shd2-cost'] = 'Custo indicativo desta combinacao ≈ <b>%1 EUR/m2</b> de vao — as camadas acima, somadas. Estimativas do Gerador de Precos CYPE (Portugal, obra nova): LSN venezianas, LST toldos, LSV portadas, LSC cortinas.';
+    const stackCost = rows.reduce((a, r) => a + SHD2_PRICE[r.d.key].eur, 0);
+    frag.appendChild(hint('shd2-cost',
+      'Indicative cost of this stack ≈ <b>%1 EUR/m2</b> of opening — the layers above, added up. Estimates from the CYPE price generator (Portugal, new build): LSN blinds, LST awnings, LSV shutters, LSC curtains.', [stackCost]));
     frag.appendChild(hint('shd2-rule',
       'Devices are counted from outside inwards up to and including the first opaque one — everything behind it is in shadow and adds nothing (Manual SCE Eq. 21 to 23). The column follows the colour of the devices, on the same three bands as Tabela 20; an exterior device beats any interior one because glass stops light but only something outside the glass stops heat before it arrives.'));
   });
