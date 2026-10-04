@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.19.0',
+  version:     '2.20.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -966,7 +966,6 @@ function showTip(html, ev) {
   TIP.style.left = x + 'px'; TIP.style.top = y + 'px';
 }
 function hideTip() { TIP.style.display = 'none'; }
-
 
 let PANELS = [];
 /**
@@ -1823,39 +1822,6 @@ const DELTA_R = [
 ];
 
 /**
- * Solar factor of an opening with ordinary glass and its device fully
- * activated, g_tot,vc — Manual SCE Tabela 48. The three columns are the
- * colour bands of Tabela 20. `op` marks a device that is opaque, which stops
- * the chain: devices are counted from outside inwards up to and including the
- * first opaque one. External devices are transformatively better than internal
- * ones, and the table is the argument for that in one page.
- */
-const SHADE_DEV = [
-  { key:'evenm', pos:'ext', op:0, group:'External devices', name:'Venetian blind, timber slats',     s:[0.11,0.11,0.11], d:[0.08,0.08,0.08] },
-  { key:'evenmt',pos:'ext', op:0, group:'External devices', name:'Venetian blind, metal slats',      s:[0.14,0.14,0.14], d:[0.09,0.09,0.09] },
-  { key:'elonat',pos:'ext', op:0, group:'External devices', name:'Awning, very transparent',         s:[0.21,0.23,0.25], d:[0.16,0.18,0.20] },
-  { key:'elonao',pos:'ext', op:1, group:'External devices', name:'Awning, opaque',                   s:[0.07,0.09,0.12], d:[0.04,0.06,0.08] },
-  { key:'elonap',pos:'ext', op:0, group:'External devices', name:'Awning, slightly transparent',     s:[0.14,0.17,0.19], d:[0.10,0.12,0.14] },
-  { key:'epersm',pos:'ext', op:1, group:'External devices', name:'Roller shutter, timber slats',     s:[0.05,0.08,0.10], d:[0.04,0.05,0.07] },
-  { key:'epersp',pos:'ext', op:1, group:'External devices', name:'Roller shutter, metal or plastic slats', s:[0.07,0.10,0.13], d:[0.04,0.07,0.09] },
-  { key:'eportf',pos:'ext', op:0, group:'External devices', name:'Shutter, fixed louvres',           s:[0.14,0.14,0.14], d:[0.09,0.09,0.09] },
-  { key:'eportr',pos:'ext', op:1, group:'External devices', name:'Shutter, adjustable louvres',      s:[0.07,0.10,0.13], d:[0.04,0.07,0.09] },
-  { key:'eporto',pos:'ext', op:1, group:'External devices', name:'Shutter, solid',                   s:[0.04,0.07,0.09], d:[0.03,0.05,0.06] },
-  { key:'icortl',pos:'int', op:0, group:'Internal devices', name:'Curtain, slightly transparent',    s:[0.36,0.46,0.56], d:[0.38,0.47,0.56] },
-  { key:'icortm',pos:'int', op:0, group:'Internal devices', name:'Curtain, very transparent',        s:[0.70,null,null], d:[0.63,null,null] },
-  { key:'icorto',pos:'int', op:1, group:'Internal devices', name:'Curtain, opaque',                  s:[0.33,0.44,0.54], d:[0.37,0.46,0.55] },
-  { key:'icortt',pos:'int', op:0, group:'Internal devices', name:'Curtain, transparent',             s:[0.38,0.48,0.58], d:[0.39,0.48,0.58] },
-  { key:'ivenez',pos:'int', op:0, group:'Internal devices', name:'Slatted blind',                    s:[0.45,0.56,0.65], d:[0.47,0.59,0.69] },
-  { key:'ipers', pos:'int', op:1, group:'Internal devices', name:'Roller shutter',                   s:[0.35,0.45,0.57], d:[0.40,0.55,0.65] },
-  { key:'iportf',pos:'int', op:0, group:'Internal devices', name:'Shutter, fixed louvres',           s:[0.45,0.56,0.65], d:[0.47,0.59,0.69] },
-  { key:'iportr',pos:'int', op:1, group:'Internal devices', name:'Shutter, adjustable louvres',      s:[0.35,0.45,0.57], d:[0.40,0.55,0.65] },
-  { key:'iporto',pos:'int', op:1, group:'Internal devices', name:'Shutter, solid',                   s:[0.30,0.40,0.50], d:[0.35,0.46,0.58] },
-  { key:'mvenez',pos:'mid', op:0, group:'Between the panes', name:'Venetian blind, thin slats',      s:[null,null,null], d:[0.28,0.34,0.40] }
-];
-/** The reference glass the table is built on: single 0,85, double 0,75. */
-const GVC_REF = { s:0.85, d:0.75 };
-
-/**
  * Orientation factor X_j, Manual SCE Tabela 52. It weights the solar energy an
  * opening receives over the heating season against a south-facing one, which
  * is the reference the tabulated G_sul is given for. A north window collects
@@ -1864,39 +1830,6 @@ const GVC_REF = { s:0.85, d:0.75 };
  * collector and such a summer liability.
  */
 const XJ = { N:0.27, NE:0.33, E:0.56, SE:0.84, S:1.00, SW:0.84, W:0.56, NW:0.33, H:0.89 };
-
-/**
- * Shading factor of a horizontal element — an overhang, a balcony, an arcade —
- * Manual SCE Tabelas 54 and 55, entered with the angle subtended at the centre
- * of the opening. Two sets of rows because Madeira's sun is different enough
- * to warrant them.
- */
-const FO = {
-  ang: [0, 30, 45, 60],
-  ori: ['N','NE/NW','E/W','SE/SW','S'],
-  win: { c: [[1,1,1,1,1],[1,0.94,0.84,0.76,0.73],[1,0.90,0.74,0.63,0.59],[1,0.85,0.64,0.49,0.44]],
-         m: [[1,1,1,1,1],[1,0.92,0.82,0.68,0.45],[1,0.88,0.72,0.60,0.56],[1,0.83,0.62,0.48,0.43]] },
-  sum: { c: [[1,1,1,1,1],[0.98,0.86,0.75,0.68,0.63],[0.97,0.78,0.64,0.57,0.55],[0.94,0.70,0.55,0.50,0.52]],
-         m: [[1,1,1,1,1],[0.97,0.84,0.74,0.69,0.68],[0.95,0.76,0.63,0.60,0.62],[0.92,0.68,0.55,0.54,0.60]] }
-};
-
-/**
- * Shading factor of a vertical element — a fin, a reveal, a projecting wing —
- * Manual SCE Tabelas 56 and 57. The left and the right fin are tabulated
- * separately, seen from inside looking out, and the two are not the same: a
- * fin on the west flank of a west window is worth a great deal in the
- * afternoon and a fin on its east flank almost nothing. Where both exist the
- * global factor is their product (Eq. 34).
- */
-const FF = {
-  ang: [0, 30, 45, 60],
-  ori: ['N','NE','E','SE','S','SW','W','NW'],
-  win: { L: [[1,1,1,1,1,1,1,1],[1,1,1,0.97,0.93,0.91,0.87,0.89],[1,1,1,0.95,0.88,0.86,0.80,0.84],[1,1,1,0.91,0.83,0.79,0.72,0.80]],
-         R: [[1,1,1,1,1,1,1,1],[1,0.89,0.87,0.91,0.93,0.97,1,1],[1,0.84,0.80,0.86,0.88,0.95,1,1],[1,0.80,0.72,0.79,0.83,0.91,1,1]] },
-  sum: { L: [[1,1,1,1,1,1,1,1],[1,1,0.96,0.91,0.91,0.96,0.95,0.86],[1,1,0.96,0.85,0.87,0.95,0.93,0.78],[1,1,0.95,0.77,0.84,0.93,0.88,0.69]],
-         R: [[1,1,1,1,1,1,1,1],[1,0.86,0.95,0.96,0.91,0.91,0.96,1],[1,0.78,0.93,0.95,0.87,0.85,0.96,1],[1,0.69,0.88,0.93,0.84,0.77,0.95,1]] }
-};
-
 /* ----------------------------------------------------------- GLAZING --
    Thirty-six insulating glass units, described only by what they do: the
    thermal transmittance of the glass alone, the light they transmit, the
@@ -2291,8 +2224,6 @@ function umaxPTPInterior(Z, what, bztu) {
   const el = umaxEl(Z, what);
   return bztu > 0.7 ? el.ptpHigh[Z.wi] : el.ptpLow[Z.wi];
 }
-/** The admissible solar factor with the shading fully activated, Tabela 8. */
-const gtotMax = (Z, inertia) => PORTARIA.gtot[inertia === 'fraca' ? 'weak' : 'heavy'][Z.si];
 
 /* ------------------------------------------------------- ASSEMBLIES --
    An assembly is a list of layers, outside first. Its thermal transmittance
@@ -2443,35 +2374,6 @@ function bztu(ratio, vol, ventilated) {
    ------------------------------------------------------------------------ */
 
 const ORI8 = ['N','NE','E','SE','S','SW','W','NW'];
-/** Tabela 54/55 collapses the eight orientations onto five symmetric ones. */
-const FO_INDEX = { N:0, NE:1, NW:1, E:2, W:2, SE:3, SW:3, S:4 };
-
-/** Linear interpolation down a shading-factor column between tabulated angles. */
-function shadeInterp(angles, col, a) {
-  if (a <= angles[0]) return col[0];
-  if (a >= angles[angles.length - 1]) return col[col.length - 1];
-  for (let i = 1; i < angles.length; i++)
-    if (a <= angles[i]) return lerp(col[i - 1], col[i], (a - angles[i - 1]) / (angles[i] - angles[i - 1]));
-  return col[col.length - 1];
-}
-/** F_o for an overhang subtending `a` degrees, on orientation `ori`. */
-function foFactor(a, ori, season, region) {
-  const set = FO[season === 'sum' ? 'sum' : 'win'][region === 'madeira' ? 'm' : 'c'];
-  const j = FO_INDEX[ori];
-  return shadeInterp(FO.ang, set.map(r => r[j]), a);
-}
-/** F_f for one fin, `side` being 'L' or 'R' seen from inside looking out. */
-function ffFactor(a, ori, side, season) {
-  const set = FF[season === 'sum' ? 'sum' : 'win'][side];
-  const j = ORI8.indexOf(ori);
-  if (j < 0) return 1;
-  return shadeInterp(FF.ang, set.map(r => r[j]), a);
-}
-/** The angle a horizontal projection of depth `p` subtends over a drop `h`. */
-const subtend = (p, h) => h > 0 ? Math.atan(p / h) * DEG : 0;
-/** The projection that subtends a given angle over a drop `h`. */
-const projectFor = (a, h) => h * Math.tan(a * RAD);
-
 /* ------------------------------------------------------- GLAZED OPENING --
    U_w of an opening is the area-weighted mean of the glass and the frame,
    which the simplified route reduces to the glazed fraction F_g of Tabela 47.
@@ -2480,17 +2382,6 @@ const projectFor = (a, h) => h * Math.tan(a * RAD);
 const uWindow = (ug, uf, fg) => fg * ug + (1 - fg) * (uf === null ? ug : uf);
 const uWithDevice = (uw, dr) => 1 / (1 / uw + dr);
 const uDayNight = (uw, uws) => (uw + uws) / 2;
-
-/**
- * g_tot of an opening whose device is fully activated, Manual SCE Eq. 19 and
- * 20. The tabulated g_tot,vc is for an ordinary glass, so it is rescaled onto
- * the actual glass: for single glazing by the ratio to 0,85, for double
- * glazing by the ratio to 0,75.
- */
-function gTot(gPerp, devVc, isDouble) {
-  if (devVc === null || devVc === undefined) return gPerp;
-  return gPerp * (devVc / (isDouble ? GVC_REF.d : GVC_REF.s));
-}
 
 /* --------------------------------------------- INTERSTITIAL CONDENSATION --
    The Glaser method of EN ISO 13788: a steady-state check that compares the
@@ -2594,7 +2485,6 @@ function csvSiteRows() {
   ];
 }
 
-
 /* ================================================= 3b. PAGE FURNITURE == */
 
 /** The heading every page opens with. */
@@ -2675,7 +2565,6 @@ function numCtl(labelText, min, max, step, value, onchange, unit) {
 function hl(node) { if (node) node.className += ' hl'; return node; }
 
 const pct  = (v, d) => isFinite(v) ? fmt(100 * v, d === undefined ? 0 : d) + ' %' : '–';
-const degs = v => isFinite(v) ? fmt(v, 0) + '°' : '–';
 /** A pass/fail badge against a maximum. */
 function verdict(value, limit, invert) {
   const ok = invert ? value >= limit : value <= limit;
@@ -4249,96 +4138,6 @@ function buildWindows(host) {
   });
 }
 
-/* ----------------------------------------------------- WINDOW SHADERS -- */
-const SHD_STATE = {
-  glaz:0, dev:'epersp', colour:'media', inertia:'media', dbl:true
-};
-
-function buildShaders(host) {
-  const Z = STATE.zone;
-  pageHead(host, 'Window shading',
-    'Sun control belongs at the opening: movable and integral shading — roller shutters, adjustable or solid shutters, slatted blinds, awnings and curtains — stops the sun before or inside the glass, and the regulation prices each device with a solar factor read straight from its table. Choose the device, its colour and the glazing behind it, then read the combination against the ceiling the summer zone allows.');
-
-  rebuildable(host, (frag, rerender) => {
-    const S = SHD_STATE;
-    const G = GLAZING[clamp(S.glaz, 0, GLAZING.length - 1)];
-    const DEV = SHADE_DEV.find(d => d.key === S.dev) || SHADE_DEV[6];
-    const ci = COLOURS.findIndex(c => c.key === S.colour);
-    const vc = DEV[S.dbl ? 'd' : 's'][ci];
-    const gt = gTot(G.g, vc, S.dbl);
-    const limG = gtotMax(Z, S.inertia);
-
-
-    /* --- controls --------------------------------------------------------- */
-
-
-    frag.appendChild(section('Solar factor with the device activated', 'Portaria Tabela 8 and Manual SCE Tabela 48'));
-    frag.appendChild(controls([
-      /* g_tot is the glass and the device together, so the glass has to be
-         selectable here. Without this control S.glaz stayed at whatever it
-         was initialised to and g ⊥,vi never moved, which made the whole
-         g_tot reading look insensitive to the glazing it depends on. */
-      selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
-        value:String(i),
-        label: t(GLAZ_FAMILY[p.f].name) + ' — U ' + fmt(p.ug, 1) + ', T' + t('L') + ' ' + p.tl + ' %, g ' + fmt(p.g, 2)
-      })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
-      selectCtl(t('Device'), SHADE_DEV.map(d => ({ value:d.key, label:t(d.group) + ' — ' + t(d.name) })),
-        S.dev, v => { S.dev = v; rerender(); }, 320),
-      selectCtl(t('Colour of the device'), COLOURS.map(c => ({ value:c.key, label:t(c.name) })),
-        S.colour, v => { S.colour = v; rerender(); }),
-      checkCtl(t('Double glazing'), S.dbl, v => { S.dbl = v; rerender(); }),
-      el('div', { class:'divider' }),
-      segCtl(t('Inertia of the space'), [
-        { value:'fraca', label:t('Weak') }, { value:'media', label:t('Medium or strong') }
-      ], S.inertia, v => { S.inertia = v; rerender(); })
-    ]));
-
-    if (vc === null || vc === undefined) {
-      frag.appendChild(el('div', { class:'warn',
-        text:t('The manual does not tabulate this device in this colour and glazing combination.') }));
-    } else {
-      frag.appendChild(stats([
-        statCard('g ⊥,vi — the glass alone', fmt(G.g, 2), null, t('Perpendicular incidence')),
-        statCard('g tot,vc — from the table', fmt(vc, 2), null, t('Ordinary glass with this device')),
-        statCard('g tot — this combination', fmt(gt, 2), null, t('Rescaled onto the actual glass'),),
-        statCard('g tot,máx', fmt(limG, 2), null, Z.sz + ' · ' + t(S.inertia === 'fraca' ? 'weak inertia' : 'medium or strong inertia'))
-      ]));
-      frag.appendChild(el('div', { class:'limitrow' }, [
-        el('span', { html: verdict(gt, limG) }),
-        el('span', { html: '<code>g<sub>tot</sub> = g<sub>⊥,vi</sub> · g<sub>tot,vc</sub> ÷ ' + fmt(S.dbl ? GVC_REF.d : GVC_REF.s, 2)
-          + ' = ' + fmt(G.g, 2) + ' · ' + fmt(vc, 2) + ' ÷ ' + fmt(S.dbl ? GVC_REF.d : GVC_REF.s, 2)
-          + ' = <b>' + fmt(gt, 2) + '</b></code>' }),
-        el('span', { html: DEV.pos === 'ext'
-          ? '<span class="pill ok">' + t('External device') + '</span>'
-          : DEV.pos === 'mid' ? '<span class="pill empty">' + t('Between the panes') + '</span>'
-          : '<span class="pill bad">' + t('Internal device') + '</span>' })
-      ]));
-    }
-
-    /* the whole of Tabela 48, in the colour chosen */
-    frag.appendChild(section('Every device the manual tabulates',
-      t(COLOURS[ci].name) + ' · ' + t(S.dbl ? 'on double glazing' : 'on single glazing'), 'shade-devices',
-      () => csvRows([['Position','Device','Opaque','gtot,vc single clear','gtot,vc double clear']]
-        .concat(SHADE_DEV.map(d => [d.group, d.name, d.op ? 'yes' : 'no', d.s[ci], d.d[ci]])))));
-    frag.appendChild(dataTable(
-      ['Device', 'Where', 'Opaque', 'g<sub>tot,vc</sub>', 'g<sub>tot</sub> with this glass', ''],
-      SHADE_DEV.map(d => {
-        const v = d[S.dbl ? 'd' : 's'][ci];
-        const g2 = v === null ? null : gTot(G.g, v, S.dbl);
-        return { cls: d.key === S.dev ? 'total' : null,
-          cells: [ t(d.name), t(d.group), d.op ? t('yes') : t('no'),
-            v === null ? '–' : fmt(v, 2),
-            g2 === null ? '–' : fmt(g2, 2),
-            g2 === null ? '' : (g2 <= limG ? '<span class="pill ok">' + t('within g tot,máx') + '</span>'
-                                           : '<span class="pill bad">' + t('above g tot,máx') + '</span>') ] };
-      }), [0, 1, 2, 5]));
-    frag.appendChild(hint('shd-devices-note',
-      'Devices are counted from outside inwards, up to and including the first opaque one — everything behind it is in shadow and adds nothing. The column is chosen by the colour of the device, on the same three bands as Tabela 20. The gap between an external and an internal device is the whole argument: the best internal blind in this table admits <b>%1</b> where the worst external one admits <b>%2</b>. Glass stops light; only something outside the glass stops heat before it arrives.',
-      [fmt(Math.min.apply(null, SHADE_DEV.filter(d => d.pos === 'int' && d[S.dbl ? 'd' : 's'][ci] !== null).map(d => d[S.dbl ? 'd' : 's'][ci])), 2),
-       fmt(Math.max.apply(null, SHADE_DEV.filter(d => d.pos === 'ext' && d[S.dbl ? 'd' : 's'][ci] !== null).map(d => d[S.dbl ? 'd' : 's'][ci])), 2)]));
-  });
-}
-
 /* ------------------------------------------------------ INDOOR AIR QUALITY --
    The envelope decides how much energy it costs to hold a room at temperature;
    it says nothing about whether the air in that room is fit to breathe. The
@@ -5076,7 +4875,7 @@ function glossBind(root) {
  */
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
-  FLR_STATE, WIN_STATE, SHD_STATE, IAQ_STATE, IAQ_VENT_STATE
+  FLR_STATE, WIN_STATE, IAQ_STATE, IAQ_VENT_STATE
 };
 
 /* A pristine copy of every state object, taken once at load, before a
@@ -5218,19 +5017,18 @@ const BUDGET_STATE = {
   ground: { area:null, price:null },
   wext:   { area:null, price:null },
   wint:   { area:null, price:null },
-  win:    { area:null, price:null },
-  shd:    { area:null, price:null }
+  win:    { area:null, price:null }
 };
-const BUDGET_ORDER = ['roof','pav','ground','wext','wint','win','shd'];
+const BUDGET_ORDER = ['roof','pav','ground','wext','wint','win'];
 const BUDGET_PT_NAME = {
   roof:'Cobertura', pav:'Pavimento sobre espaço não útil / ar exterior',
   ground:'Pavimento térreo', wext:'Parede exterior', wint:'Parede interior',
-  win:'Vãos envidraçados', shd:'Dispositivos de sombreamento / oclusão'
+  win:'Vãos envidraçados'
 };
 const BUDGET_EN_NAME = {
   roof:'Roof', pav:'Floor over unheated space / outside air',
   ground:'Ground floor', wext:'External wall', wint:'Internal wall',
-  win:'Glazed openings', shd:'Shading / shutter devices'
+  win:'Glazed openings'
 };
 /* Registered here — after STATE_REGISTRY exists — so Save/Restart/CSV round-trip budget with thermal state. */
 STATE_REGISTRY.BUDGET_STATE = BUDGET_STATE;
@@ -5329,12 +5127,8 @@ const COST_PANELS = {
   windows: [{ key:'win', link:GDP_BASE + '/Vaos.html',
              linkLabel:'L · Vãos',
              unitHint:'Frame + glass + night-time shutter device: the complete opening unit.' }],
-  shaders: [{ key:'shd', link:GDP_BASE + '/Vaos.html',
-             linkLabel:'L · Vãos — dispositivos',
-             unitHint:'Blinds, shutters and screens: budget the external device apart from the opening.' }],
   iaq:     []
 };
-
 
 /* ================================================================
    v2.1.0 — MATERIAL MOSAIC (first tab)
@@ -5744,7 +5538,6 @@ function photoEditorFor(key, rerender) {
   return box;
 }
 
-
 const SITE_ZONE_OF = {
  'Alto Trás-os-Montes':'Norte','Ave':'Norte','Cávado':'Norte','Douro':'Norte',
  'Entre Douro e Vouga':'Norte','Grande Porto':'Norte','Minho-Lima':'Norte','Tâmega':'Norte',
@@ -5957,7 +5750,6 @@ function buildMaterials(host) {
     .map(([lab, url]) => '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + lab + '</a>').join(' · ') +
     ' — Gerador de Preços, CYPE.' }));
 }
-
 
 /* ================================================================
    v2.4.0 — SUPPLIERS (directory tab, no images)
@@ -6546,7 +6338,6 @@ const TABS = [
   { key:'wallsext',  label:'External walls', build:buildWallsExt },
   { key:'wallsint',  label:'Internal walls', build:buildWallsInt },
   { key:'windows',   label:'Windows',        build:buildWindows },
-  { key:'shaders',   label:'Window shading', build:buildShaders },
   { key:'iaq',       label:'Indoor air quality', build:buildIAQ }
 ];
 
@@ -6582,7 +6373,7 @@ const REFS = [
    'A separate regime from the SCE: the 300 Bq/m³ indoor radon reference level and the priority areas it defines, cited only as an awareness note on a sealed unheated space — this application carries none of its data.',
    'https://diariodarepublica.pt/dr/legislacao-consolidada/decreto-lei/2018-117202808-117211193'],
   ['Direção-Geral de Energia e Geologia. (2021). <i>Manual SCE — Manual técnico para a avaliação do desempenho energético dos edifícios</i> (v1.0), approved by Despacho n.º 6476-H/2021, de 1 de julho.',
-   'Climate zoning and the altitude correction (Eq. 2, Tabelas 7 to 10); reduction coefficient of unheated spaces (Tabela 16); material characterisation (Tabela 19); solar absorptance (Tabela 20); surface and air-space resistances (Tabelas 23 and 24); default transmittances (Tabelas 25 and 26); ground floors (Tabelas 27 and 28, Eq. 9); thermal inertia (Tabelas 35 and 40, Eq. 11); glazed openings (Tabelas 45, 47 and 48); orientation factor (Tabela 52); shading factors (Tabelas 54 to 57, Eq. 34); indoor air quality (Tabelas 67, 69 to 71 and 73, Eqs. 51 to 56).',
+   'Climate zoning and the altitude correction (Eq. 2, Tabelas 7 to 10); reduction coefficient of unheated spaces (Tabela 16); material characterisation (Tabela 19); solar absorptance (Tabela 20); surface and air-space resistances (Tabelas 23 and 24); default transmittances (Tabelas 25 and 26); ground floors (Tabelas 27 and 28, Eq. 9); thermal inertia (Tabelas 35 and 40, Eq. 11); glazed openings (Tabelas 45 and 47); orientation factor (Tabela 52); indoor air quality (Tabelas 67, 69 to 71 and 73, Eqs. 51 to 56).',
    'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf'],
   ['Laboratório Nacional de Engenharia Civil. <i>ITE 50 — Coeficientes de transmissão térmica de elementos da envolvente dos edifícios</i>.',
    'Thermal conductivity and density of the materials library, which the Manual SCE names as the reference source above default values.',
@@ -7105,9 +6896,7 @@ Object.assign(PT, {
   "Indoor air quality": "Qualidade do ar interior",
   "The envelope keeps heat in or out; the air still has to be replaced. Decreto-Lei n.º {}-D/{} and Portaria n.º {}-I/{} set a minimum on how much — one figure for a dwelling, a calculation for everything else.":
     "A envolvente mantém o calor dentro ou fora; o ar continua a ter de ser renovado. O Decreto-Lei n.º {}-D/{} e a Portaria n.º {}-I/{} fixam um mínimo para essa renovação — um único valor para uma habitação, um cálculo para todo o resto.",
-  "Window shading": "Sombreamento dos vãos",
-  "Sun control belongs at the opening: movable and integral shading — roller shutters, adjustable or solid shutters, slatted blinds, awnings and curtains — stops the sun before or inside the glass, and the regulation prices each device with a solar factor read straight from its table. Choose the device, its colour and the glazing behind it, then read the combination against the ceiling the summer zone allows.": "O controlo do sol faz-se no vão: o sombreamento móvel e integral — estores, portadas, venezianas, lonas e cortinas — trava o sol antes ou dentro do vidro, e o regulamento atribui a cada dispositivo um fator solar lido diretamente na sua tabela. Escolha o dispositivo, a cor e o vidro por detrás, e leia a combinação contra o teto que a zona de verão admite.", 
-  "The regulation reduces a site to two letters. Everything the rest of this application asks of a roof, a wall or a window follows from them.":
+      "The regulation reduces a site to two letters. Everything the rest of this application asks of a roof, a wall or a window follows from them.":
     "A regulamentação reduz um local a duas letras. Tudo o que o resto desta aplicação pede a uma cobertura, a uma parede ou a um vão decorre delas.",
   "The horizontal envelope carries the strictest limit of any opaque element and takes the heaviest summer load of any surface on the building. It is also the one most often built without enough of anything.":
     "A envolvente horizontal tem o limite mais exigente de todos os elementos opacos e recebe a maior carga de Verão de qualquer superfície do edifício. É também aquela que mais vezes é construída sem o suficiente de coisa alguma.",
@@ -7525,89 +7314,6 @@ Object.assign(PT, {
   "Cooling season — this is the gain you must shade": "Estação de arrefecimento — este é o ganho que é preciso sombrear",
 
   /* shading */
-  "Overhang": "Pala horizontal",
-  "Left fin": "Pala esquerda",
-  "Right fin": "Pala direita",
-  "Opening height": "Altura do vão",
-  "Opening width": "Largura do vão",
-  "F o — the overhang": "F o — a pala horizontal",
-  "F f — both fins": "F f — as duas palas verticais",
-  "F s in summer": "F s no Verão",
-  "F s in winter": "F s no Inverno",
-  "left": "esquerda", "right": "direita",
-  "cooling season": "estação de arrefecimento",
-  "The share of the sun that still arrives": "A parte do sol que ainda chega",
-  "What the same device costs you in January": "O que o mesmo dispositivo custa em Janeiro",
-  "The device, in section and in plan": "O dispositivo, em corte e em planta",
-  "The angles the manual reads, subtended at the centre of the opening":
-    "Os ângulos que o manual lê, medidos no centro do vão",
-  "Section": "Corte", "Plan": "Planta",
-  "seen from inside looking out": "visto do interior para o exterior",
-  "overhang": "pala",
-  "opening": "vão",
-  "Shading factor of a horizontal element": "Fator de sombreamento de um elemento horizontal",
-  "Shading factor of a vertical element": "Fator de sombreamento de um elemento vertical",
-  "Angle": "Ângulo",
-  "Fin on the left": "Pala à esquerda",
-  "Fin on the right": "Pala à direita",
-  "Solar factor with the device activated": "Fator solar com o dispositivo activado",
-  "Device": "Dispositivo",
-  "Colour of the device": "Cor do dispositivo",
-  "Double glazing": "Vidro duplo",
-  "Inertia of the space": "Inércia do espaço",
-  "g ⊥,vi — the glass alone": "g ⊥,vi — só o vidro",
-  "g tot,vc — from the table": "g tot,vc — da tabela",
-  "g tot — this combination": "g tot — esta combinação",
-  "g tot,máx": "g tot,máx",
-  "Perpendicular incidence": "Incidência perpendicular",
-  "Ordinary glass with this device": "Vidro corrente com este dispositivo",
-  "Rescaled onto the actual glass": "Reconvertido para o vidro real",
-  "weak inertia": "inércia fraca",
-  "medium or strong inertia": "inércia média ou forte",
-  "External device": "Dispositivo exterior",
-  "Internal device": "Dispositivo interior",
-  "Between the panes": "Entre os vidros",
-  "External devices": "Dispositivos de protecção exteriores",
-  "Internal devices": "Dispositivos de protecção interiores",
-  "Every device the manual tabulates": "Todos os dispositivos que o manual tabela",
-  "on double glazing": "em vidro duplo",
-  "on single glazing": "em vidro simples",
-  "g<sub>tot</sub> with this glass": "g<sub>tot</sub> com este vidro",
-  "Where": "Posição",
-  "Opaque": "Opaca",
-  "yes": "sim", "no": "não",
-  "within g tot,máx": "dentro de g tot,máx",
-  "above g tot,máx": "acima de g tot,máx",
-  "The manual does not tabulate this device in this colour and glazing combination.":
-    "O manual não tabela este dispositivo nesta combinação de cor e de vidro.",
-  "Venetian blind, timber slats": "Estore veneziano de lâminas de madeira",
-  "Venetian blind, metal slats": "Estore veneziano de lâminas metálicas",
-  "Venetian blind, thin slats": "Estore veneziano de lâminas delgadas",
-  "Venetian blind": "Estore veneziano de lâminas",
-  "Awning, very transparent": "Lona muito transparente",
-  "Awning, opaque": "Lona opaca",
-  "Awning, slightly transparent": "Lona pouco transparente",
-  "Roller shutter, timber slats": "Persiana de réguas de madeira",
-  "Roller shutter, metal or plastic slats": "Persiana de réguas metálicas ou plásticas",
-  "Roller shutter, metal slats": "Persiana de réguas metálicas",
-  "Roller shutter, plastic slats filled with insulation": "Persiana de réguas plásticas com preenchimento de isolante",
-  "Roller shutter, plastic slats, unfilled": "Persiana de réguas plásticas sem preenchimento de isolante",
-  "Roller shutter": "Persiana",
-  "Shutter, fixed louvres": "Portada de lâminas fixas",
-  "Shutter, adjustable louvres": "Portada de lâminas reguláveis",
-  "Shutter, solid": "Portada opaca",
-  "Shutter, slatted": "Portada de réguas",
-  "Solid timber shutter, other thicknesses": "Portada opaca de madeira, outras espessuras",
-  "Solid timber shutter, {} to {} mm": "Portada opaca de madeira com {} a {} mm",
-  "Solid plastic shutter, filled with insulation": "Portada opaca de plástico com preenchimento de isolante",
-  "Solid plastic shutter, unfilled": "Portada opaca de plástico sem preenchimento de isolante",
-  "Solid metal shutter": "Portada opaca metálica",
-  "Curtains and awnings": "Cortinas e lonas",
-  "Curtain, slightly transparent": "Cortina ligeiramente transparente",
-  "Curtain, very transparent": "Cortina muito transparente",
-  "Curtain, opaque": "Cortina opaca",
-  "Curtain, transparent": "Cortina transparente",
-  "Slatted blind": "Estore de lâminas",
 
   /* small units and furniture */
   "CSV": "CSV", "PNG": "PNG",
@@ -7884,7 +7590,6 @@ Object.assign(PT_HINT, {
     'Onde um sistema mecânico recupera calor do ar que extrai, esta é a eficiência que o manual permite por defeito, na ausência de melhor informação — lida no tipo de permutador e não no fabricante. Um permutador de placas em contra fluxo recupera %1 % do que recupera um de fluxos cruzados da mesma família, %2 %; a roda térmica higroscópica corrente fica próxima de ambos.'
 });
 
-
 /* v2.0.2: English–Portuguese for the cost/quantity/budget layer. Keys are the
    exact English strings passed through t(); anything missing falls back to
    English instead of breaking the page. */
@@ -7929,7 +7634,6 @@ Object.assign(PT, {
 PT_HINT['clima-orcamento'] =
   'O clima fixa a exigência (I1–I3, V1–V3) e a exigência fixa a espessura — e a espessura fixa o custo. Ao percorrer os separadores, cada solução que cumprir o limite pede área e preço unitário; o orçamento global vai-se somando nos painéis de <b>Custo e quantidades</b>.';
 
-
 /* v2.1.0: English–Portuguese for the material mosaic. */
 Object.assign(PT, {
   'Materials': 'Materiais',
@@ -7953,7 +7657,6 @@ Object.assign(PT, {
 PT_HINT['mat-zone'] =
   'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b> e uma parede <b>%3 W/(m²·°C)</b>. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
 
-
 /* v2.2.0: English–Portuguese for photographs and regional availability. */
 Object.assign(PT, {
   'Kind': 'Tipo',
@@ -7975,7 +7678,6 @@ Object.assign(PT, {
 });
 PT_HINT['mat-photos'] =
   'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.';
-
 
 /* v2.4.0: English–Portuguese for the suppliers directory. */
 Object.assign(PT, {
