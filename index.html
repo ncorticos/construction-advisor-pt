@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.18.0',
+  version:     '2.19.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4470,16 +4470,25 @@ function buildIAQ(host) {
           v => { V.hobs = v; V.protection = protFromRatio(V.dobs / Math.max(v, 0.1)); rerender(); }, 'm')
       ]));
 
-      makePanel(frag, {
+    const facadeGeom = (W, H) => {
+      const hi = Math.max(V.hedif, V.hobs) * 1.25 + 1;
+      const xMax = V.dobs + Math.max(6, V.hobs * 0.7);
+      const xMin = -Math.max(6, xMax * 0.10);
+      const scaleH = 78;                                  // the band strip below
+      const P = plotRect(46, 16, W - 60, H - 16 - scaleH - 46, xMin, xMax, 0, hi);
+      return { P, xMin, xMax, hi };
+    };
+      const facPanel = makePanel(frag, {
         title: 'Façade protection (D obs ÷ H obs)',
-        note: 'The obstacle facing this façade, in section, and the band the ratio falls in',
+        note: 'The obstacle facing this façade, in section, and the band the ratio falls in. Drag the obstacle sideways for its distance, its top edge for its height.',
         aspect: 2.3,
         render(ctx, W, H) {
-          const hi = Math.max(V.hedif, V.hobs) * 1.25 + 1;
-          const xMax = V.dobs + Math.max(6, V.hobs * 0.7);
-          const xMin = -Math.max(6, xMax * 0.10);
-          const scaleH = 78;                                  // the band strip below
-          const P = plotRect(46, 16, W - 60, H - 16 - scaleH - 46, xMin, xMax, 0, hi);
+          // live values: a drag repaints the canvas without rebuilding the
+          // page, so the drawing reads the state itself, not the snapshot
+          // the stats and hints below were built from
+          const ratio = V.dobs / Math.max(V.hobs, 0.1);
+          const ratioClass = protFromRatio(ratio);
+          const { P } = facadeGeom(W, H);
 
           // ground
           stroke(ctx, CH.ink2, 1.4);
@@ -4552,6 +4561,71 @@ function buildIAQ(host) {
           ['Class in use', t(IAQ_PROTECTION.find(p => p.key === V.protection).name), '']
         ]))
       });
+
+      /* --- direct manipulation, Architecture-Advisor style -------------------
+         The obstacle drags sideways for D obs, its top edge drags for H obs;
+         the numeric inputs above stay in step. Repaints live during the drag;
+         one rebuild on release syncs stats, hints and exports. */
+      {
+        const cv = facPanel.canvas;
+        cv.style.touchAction = 'none';
+        const clamp05 = (v, a, b) => Math.min(b, Math.max(a, Math.round(v * 2) / 2));
+        let drag = null;
+        const locate = ev => {
+          const r = cv.getBoundingClientRect();
+          const x = (ev.clientX - r.left) * (r.width ? facPanel.W / r.width : 1);
+          const y = (ev.clientY - r.top) * (r.height ? facPanel.H / r.height : 1);
+          const g = facadeGeom(facPanel.W, facPanel.H);
+          return { x, y, g };
+        };
+        const zoneAt = ev => {
+          const { x, y, g } = locate(ev);
+          const left = g.P.sx(V.dobs), right = g.P.sx(g.xMax);
+          const top = g.P.sy(V.hobs), bottom = g.P.sy(0);
+          if (x < left - 8 || x > right + 8 || y < top - 10 || y > bottom + 8) return null;
+          if (Math.abs(y - top) <= 10) return 'h';
+          return 'd';
+        };
+        cv.addEventListener('pointerdown', ev => {
+          const z = zoneAt(ev);
+          if (!z) return;
+          ev.preventDefault();
+          const { x, y, g } = locate(ev);
+          // frozen at grab: the plot window follows the values, so deltas are
+          // measured in the grab scale, never the moving one
+          drag = { kind:z, x0:x, y0:y, d0:V.dobs, h0:V.hobs,
+            ppuX:g.P.w / (g.xMax - g.xMin), ppuY:g.P.h / g.hi };
+          try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
+          cv.style.cursor = z === 'h' ? 'ns-resize' : 'ew-resize';
+        });
+        cv.addEventListener('pointermove', ev => {
+          if (!drag) {
+            const z = zoneAt(ev);
+            cv.style.cursor = !z ? '' : (z === 'h' ? 'ns-resize' : 'ew-resize');
+            return;
+          }
+          ev.preventDefault();
+          const { x, y } = locate(ev);
+          if (drag.kind === 'd') {
+            const v = clamp05(drag.d0 + (x - drag.x0) / drag.ppuX, 0.5, 300);
+            if (v !== V.dobs) {
+              V.dobs = v;
+              V.protection = protFromRatio(v / Math.max(V.hobs, 0.1));
+              facPanel.draw();
+            }
+          } else {
+            const v = clamp05(drag.h0 - (y - drag.y0) / drag.ppuY, 0.5, 150);
+            if (v !== V.hobs) {
+              V.hobs = v;
+              V.protection = protFromRatio(V.dobs / Math.max(v, 0.1));
+              facPanel.draw();
+            }
+          }
+        });
+        const dropFacade = () => { if (!drag) return; drag = null; cv.style.cursor = ''; rerender(); };
+        cv.addEventListener('pointerup', dropFacade);
+        cv.addEventListener('pointercancel', dropFacade);
+      }
 
       frag.appendChild(hint('iaq-protection-geometry',
         'Manual SCE Tabela 6 reads the shelter of a façade off one ratio: the horizontal distance to the obstacle in front of it, <b>D<sub>obs</sub></b>, over that obstacle’s height, <b>H<sub>obs</sub></b>. Below <b>1,5</b> the façade is protected, between 1,5 and 4 normal, above 4 unprotected — and unprotected is also what you take when there is no obstacle at all or you do not know what is there. This façade reads <b>%1</b>, which is <b>%2</b>.%3<br><br>Note what the ratio does <i>not</i> contain: the height of your own building. A tall building beside a low one is unprotected however close the low one stands, which is why the pressure table stops offering the protected column at all above 50 m — over that height the façade is taken as unprotected whatever this drawing shows.',
@@ -6987,6 +7061,8 @@ Object.assign(PT, {
   "Façade protection (D obs ÷ H obs)": "Protecção da fachada (D obs ÷ H obs)",
   "The obstacle facing this façade, in section, and the band the ratio falls in":
     "O obstáculo em frente a esta fachada, em corte, e a banda em que a razão se situa",
+  "The obstacle facing this façade, in section, and the band the ratio falls in. Drag the obstacle sideways for its distance, its top edge for its height.":
+    "O obstáculo em frente a esta fachada, em corte, e a banda em que a razão se situa. Arraste o obstáculo para os lados pela distância, pelo topo pela altura.",
   "this building": "este edifício",
   "obstacle": "obstáculo",
   "Protected": "Protegida",
