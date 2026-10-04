@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.26.0',
+  version:     '2.27.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5080,6 +5080,7 @@ function buildShading(host) {
         };
         const drawWin = (cx, devs, tag, nearFirst) => {
           const x0 = cx - ww / 2;
+          const step = devs.length > 1 ? Math.min(16, Math.round(56 / (devs.length - 1))) : 0;
           ctx.fillStyle = '#eef1f4';
           ctx.fillRect(x0 - 12, y0 - 12, ww + 24, wh + 24);
           stroke(ctx, CH.line, 1);
@@ -5099,7 +5100,7 @@ function buildShading(host) {
             const rec = rows.find(r => r.d === d);
             const sh = !!rec && opAt >= 0 && rows.indexOf(rec) > opAt;
             if (sh) ctx.globalAlpha = 0.35;
-            const bx = x0 + k * 7, by = y0 + k * 7;
+            const bx = x0 + k * step, by = y0 + k * step;
             paint(d, bx, by, rec);
             if (rec) {
               const fam = famOf(d);
