@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.22.0',
+  version:     '2.23.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5002,6 +5002,95 @@ function buildShading(host) {
           (r.v === null || r.v === undefined) ? '' : +r.v.toFixed(3),
           (r.part === undefined ? '' : +(G.g * r.part).toFixed(3))])))
     });
+    makePanel(frag, {
+      title:'The window in elevation', note:'Exterior left, interior right — ticked devices drawn closed over the opening',
+      aspect:2.4,
+      render(ctx, W, H) {
+        const ext = act.filter(d => d.pos === 'ext');
+        const inn = act.filter(d => d.pos === 'int');
+        const mid = act.find(d => d.pos === 'mid');
+        const halfW = W / 2;
+        const ww = Math.min(190, halfW - 70), wh = Math.min(250, H - 80);
+        const y0 = 34;
+        const slats = (bx, by, y1, y2, step) => {
+          stroke(ctx, CH.ink2, 1);
+          for (let y = y1; y <= y2; y += step) seg(ctx, px(bx), px(y), px(bx + ww), px(y));
+        };
+        const paint = (d, bx, by, rec) => {
+          const k = d.key;
+          if (/ven/.test(k)) {
+            if (d.op) ctx.fillStyle = CH.ink; else ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillRect(bx, by, ww, wh);
+            slats(bx, by, by + 4, by + wh - 2, 7);
+          } else if (/^elon/.test(k)) {
+            ctx.fillStyle = d.op ? CH.ink : 'rgba(255,255,255,0.6)';
+            ctx.fillRect(bx, by, ww, 24);
+            for (let fx = bx + 6; fx < bx + ww; fx += 10) seg(ctx, px(fx), px(by), px(fx), px(by + 24));
+            stroke(ctx, CH.ink2, 1.6);
+            seg(ctx, px(bx), px(by + 24), px(bx - 12), px(by + 44));
+            seg(ctx, px(bx + ww), px(by + 24), px(bx + ww + 12), px(by + 44));
+          } else if (/portf/.test(k)) {
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillRect(bx, by, ww, wh);
+            slats(bx, by, by + 4, by + wh - 2, 6);
+            ctx.fillStyle = CH.ink2;
+            ctx.fillRect(bx, by, 7, wh); ctx.fillRect(bx + ww - 7, by, 7, wh);
+          } else if (/portr/.test(k)) {
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillRect(bx, by, ww, wh);
+            slats(bx, by, by + 12, by + wh - 12, 6);
+            ctx.fillStyle = CH.ink2;
+            ctx.fillRect(bx, by, ww, 9); ctx.fillRect(bx, by + wh - 9, ww, 9);
+          } else if (/porto/.test(k)) {
+            ctx.fillStyle = CH.ink;
+            ctx.fillRect(bx, by, ww, wh);
+          } else if (/^icort/.test(k)) {
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillRect(bx, by, ww, wh);
+            stroke(ctx, CH.ink2, 1);
+            for (let fx = bx + 5; fx < bx + ww; fx += 9) seg(ctx, px(fx), px(by), px(fx), px(by + wh));
+          }
+          stroke(ctx, CH.ink2, 1.2);
+          ctx.strokeRect(px(bx), px(by), Math.round(ww), Math.round(wh));
+        };
+        const drawWin = (cx, devs, tag, nearFirst) => {
+          const x0 = cx - ww / 2;
+          ctx.fillStyle = '#eef1f4';
+          ctx.fillRect(x0 - 12, y0 - 12, ww + 24, wh + 24);
+          stroke(ctx, CH.line, 1);
+          ctx.strokeRect(px(x0 - 12), px(y0 - 12), Math.round(ww + 24), Math.round(wh + 24));
+          ctx.fillStyle = '#c9d8e8';
+          ctx.fillRect(x0, y0, ww, wh);
+          stroke(ctx, CH.ink2, 2);
+          ctx.strokeRect(px(x0), px(y0), Math.round(ww), Math.round(wh));
+          stroke(ctx, CH.ink2, 1);
+          seg(ctx, px(x0 + ww / 2), px(y0), px(x0 + ww / 2), px(y0 + wh));
+          seg(ctx, px(x0), px(y0 + wh / 2), px(x0 + ww), px(y0 + wh / 2));
+          const order = devs.map((_, i) => i);
+          if (nearFirst) order.reverse();
+          const nums = [];
+          order.forEach(k => {
+            const d = devs[k];
+            const rec = rows.find(r => r.d === d);
+            const sh = !!rec && opAt >= 0 && rows.indexOf(rec) > opAt;
+            if (sh) ctx.globalAlpha = 0.35;
+            const bx = x0 + k * 7, by = y0 + k * 7;
+            paint(d, bx, by, rec);
+            if (rec) {
+              const ny = /^elon/.test(d.key) ? by + 12 : by + wh / 2;
+              nums.push([rec.n, bx + ww / 2, ny, d.op && !sh ? CH.white : CH.ink]);
+            }
+            ctx.globalAlpha = 1;
+          });
+          nums.forEach(a => label(ctx, String(a[0]), a[1], a[2], a[3], F(10, '600'), 'center', 'middle'));
+          label(ctx, t(tag), cx, y0 + wh + 40, CH.muted, F(10, '600'), 'center', 'middle');
+        };
+        drawWin(halfW / 2, ext.concat(mid ? [mid] : []), 'Outside', true);
+        drawWin(halfW + halfW / 2, (mid ? [mid] : []).concat(inn), 'Inside', false);
+        stroke(ctx, CH.line2, 1);
+        seg(ctx, px(halfW), px(14), px(halfW), px(H - 14));
+      }
+    });
     frag.appendChild(section('The combination, device by device',
       t('Ordinary glass, this colour, on this glazing'), 'shading-combination',
       () => csvRows([['#','Device','Position','Opaque','gtot,vc','running g tot']]
@@ -7858,6 +7947,11 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.23.0: twin elevations. */
+Object.assign(PT, {
+  'The window in elevation': 'O vão em alçado',
+  'Exterior left, interior right — ticked devices drawn closed over the opening': 'Exterior à esquerda, interior à direita — dispositivos marcados desenhados fechados sobre o vão'
 });
 /* v2.22.0: English–Portuguese for solar protections. */
 Object.assign(PT, {
