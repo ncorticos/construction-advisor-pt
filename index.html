@@ -561,7 +561,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
       </div>
       <div>
         <h5 data-t="footAuthor">Author</h5>
-        <p>Nuno Dinis Cortiços</p>
+        <p><a href="https://ncorticos.github.io/professor-nuno-corticos/" target="_blank" rel="noopener noreferrer">Nuno Dinis Cortiços</a></p>
         <h5 style="margin-top:14px" data-t="footInst">Institution</h5>
         <p>Lisbon School of Architecture,<br>Universidade de Lisboa</p>
         <h5 style="margin-top:14px" data-t="footDev">Developed with</h5>
@@ -582,7 +582,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
     </div>
 
     <p class="foot-legal" data-t="footLegal">
-      © 2026 Nuno Dinis Cortiços. This is a teaching instrument. It reproduces tabulated values from the Manual SCE and
+      © 2026 <a href="https://ncorticos.github.io/professor-nuno-corticos/" target="_blank" rel="noopener noreferrer">Nuno Dinis Cortiços</a>. This is a teaching instrument. It reproduces tabulated values from the Manual SCE and
       the Portaria in force so that a student can see where a limit comes from, but it is not a certified calculation
       engine and it does not produce a pre-certificate. No figure it gives should be entered into a compliance
       submission without being checked against the published text and verified by a qualified expert of the SCE.
@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.28.0',
+  version:     '2.28.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -7124,7 +7124,7 @@ Object.assign(STATIC_PT, {
   footPriv: 'Privacidade',
   footPrivBody: 'Nenhum dado do local sai do navegador. Nada é enviado.',
   footMethods: 'Métodos e fontes',
-  footLegal: '© 2026 Nuno Dinis Cortiços. Este é um instrumento pedagógico. Reproduz valores tabelados do Manual SCE e da Portaria em vigor para que um estudante possa ver de onde vem um limite, mas não é um motor de cálculo certificado nem produz um pré-certificado. Nenhum valor aqui apresentado deve ser inscrito num processo de conformidade sem ser confrontado com o texto publicado e verificado por um perito qualificado do SCE.'
+  footLegal: '© 2026 <a href="https://ncorticos.github.io/professor-nuno-corticos/" target="_blank" rel="noopener noreferrer">Nuno Dinis Cortiços</a>. Este é um instrumento pedagógico. Reproduz valores tabelados do Manual SCE e da Portaria em vigor para que um estudante possa ver de onde vem um limite, mas não é um motor de cálculo certificado nem produz um pré-certificado. Nenhum valor aqui apresentado deve ser inscrito num processo de conformidade sem ser confrontado com o texto publicado e verificado por um perito qualificado do SCE.'
 });
 
 /* --- the pages ---------------------------------------------------------- */
@@ -8023,6 +8023,7 @@ PT_HINT['sup-dir'] =
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
 });
+/* v2.28.1: author name linked to professor page. */
 /* v2.28.0: locked protection readout. */
 Object.assign(PT, {
   '— from D obs ÷ H obs': '— de D obs ÷ H obs'
