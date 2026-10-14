@@ -359,7 +359,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 /* A layer of construction, in the assembly editors. */
 .layers{display:flex; flex-direction:column; gap:6px; margin:10px 0 4px}
 .layer{
-  display:grid; grid-template-columns:1fr 92px 92px 84px 30px; gap:8px; align-items:center;
+  display:grid; grid-template-columns:1fr 92px 92px 84px 26px 26px 26px; gap:8px; align-items:center;
   padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel);
 }
 @media(max-width:760px){.layer{grid-template-columns:1fr 1fr; gap:6px}}
@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.30.0',
+  version:     '2.31.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -2940,6 +2940,12 @@ function assemblyEditor(host, spec) {
         sel, th,
         el('span', { class:'r', text: fmt(part.r, 3) }),
         el('span', { class:'r', text: fmt(part.m, 0) + ' kg/m²' }),
+        el('button', { class:'x', text:'↑', title:t('Move this layer up'), 'aria-label':t('Move this layer up'),
+          disabled: i === 0 ? '' : null, style: i === 0 ? 'opacity:.25' : null,
+          onclick: () => { if (i > 0) { const m = S.layers.splice(i, 1)[0]; S.layers.splice(i - 1, 0, m); render(); } } }),
+        el('button', { class:'x', text:'↓', title:t('Move this layer down'), 'aria-label':t('Move this layer down'),
+          disabled: i === S.layers.length - 1 ? '' : null, style: i === S.layers.length - 1 ? 'opacity:.25' : null,
+          onclick: () => { if (i < S.layers.length - 1) { const m = S.layers.splice(i, 1)[0]; S.layers.splice(i + 1, 0, m); render(); } } }),
         el('button', { class:'x', text:'×', title:t('Remove this layer'), 'aria-label':t('Remove this layer'),
           onclick: () => { S.layers.splice(i, 1); render(); } })
       ]));
@@ -2963,7 +2969,22 @@ function assemblyEditor(host, spec) {
        'down' is a horizontal element — a roof, a floor — and reads best
        stacked the way it is actually built, top to bottom; heat flowing 'h'
        is a vertical element, a wall, read left to right instead. */
-    if (S.layers.length) makePanel(wrap, {
+    const geomFor = (W) => {
+      const SPAN_PX = 240, CROSS_PX = 180;
+      const vertical = spec.flow !== 'h';
+      const barY = 34;
+      const barH = vertical ? SPAN_PX : CROSS_PX;
+      const barW = vertical ? CROSS_PX : SPAN_PX;
+      const barX = Math.round((W - barW) / 2);
+      const thick = S.layers.map(layerThickness);
+      const total = thick.reduce((a, b) => a + b, 0) || 1;
+      const raw = thick.map(d => Math.max(4, d / total * SPAN_PX));
+      const scale = SPAN_PX / raw.reduce((a, b) => a + b, 0);
+      const edges = [vertical ? barY : barX];
+      raw.forEach(r => edges.push(edges[edges.length - 1] + r * scale));
+      return { vertical, barX, barY, barW, barH, thick, total, edges };
+    };
+    if (S.layers.length) { const secPanel = makePanel(wrap, {
       title: 'Section, to scale',
       note: spec.bc === 'int'
         ? 'Layer thickness left to right; both faces are inside'
@@ -2978,14 +2999,8 @@ function assemblyEditor(host, spec) {
            the roof column transposed, read left to right. Centring the bar, as
            the roof column already is, also keeps the same wall from changing
            length when the window is resized. */
-        const SPAN_PX = 240, CROSS_PX = 180;
-        const vertical = spec.flow !== 'h';
-        const barY = 34;
-        const barH = vertical ? SPAN_PX : CROSS_PX;
-        const barW = vertical ? CROSS_PX : SPAN_PX;
-        const barX = Math.round((W - barW) / 2);
-        const thick = S.layers.map(layerThickness);
-        const total = thick.reduce((a, b) => a + b, 0) || 1;
+
+        const { vertical, barX, barY, barW, barH, thick, total, edges } = geomFor(W);
         const startLbl = spec.bc === 'int' ? t('One face') : t('Outside');
         const endLbl   = spec.bc === 'int' ? t('Other face') : t('Inside');
         label(ctx, t('Total thickness') + ' ' + fmt(total * 1000, 0) + ' mm', 10, 12, CH.ink2, F(10.5, '600'), 'left', 'middle');
@@ -2999,20 +3014,15 @@ function assemblyEditor(host, spec) {
 
         /* every band gets at least a few pixels so a thin membrane stays
            visible, then everything is rescaled back to fill the bar exactly */
-        const span = SPAN_PX;
-        const raw = thick.map(d => Math.max(4, d / total * span));
-        const scale = span / raw.reduce((a, b) => a + b, 0);
-        let pos = vertical ? barY : barX;
         S.layers.forEach((L, i) => {
-          const size = raw[i] * scale;
-          const rx = vertical ? barX : pos, ry = vertical ? pos : barY;
+          const size = edges[i + 1] - edges[i];
+          const rx = vertical ? barX : edges[i], ry = vertical ? edges[i] : barY;
           const rw = vertical ? barW : size, rh = vertical ? size : barH;
           const col = materialColor(L);
           ctx.fillStyle = col; ctx.fillRect(rx, ry, rw, rh);
           if (L.air) drawHatch(ctx, rx, ry, rw, rh);
           stroke(ctx, CH.white, 1.4); ctx.strokeRect(px(rx), px(ry), Math.round(rw), Math.round(rh));
           if (size >= 26) label(ctx, fmt(thick[i] * 1000, 0), rx + rw / 2, ry + rh / 2, contrastOn(col), F(10, '600'), 'center', 'middle');
-          pos += size;
         });
         stroke(ctx, CH.line, 1); ctx.strokeRect(px(barX), px(barY), Math.round(barW), Math.round(barH));
 
@@ -3023,6 +3033,57 @@ function assemblyEditor(host, spec) {
           { cols, colWidth, rowHeight:16 });
       }
     });
+      /* --- drag bands to reorder -------------------------------------------
+         Grab a band and drop it elsewhere in the stack: the drawing repaints
+         live, one rebuild on release syncs the list above, the results below
+         and the page around them. The arrow buttons in each row do the same
+         step by step for touch and keyboard users. */
+      if (S.layers.length > 1) {
+        const cv = secPanel.canvas;
+        cv.style.touchAction = 'none';
+        let drag = null;
+        const axisPos = ev => {
+          const r = cv.getBoundingClientRect();
+          const g = geomFor(secPanel.W);
+          return g.vertical
+            ? { p:(ev.clientY - r.top) * (r.height ? secPanel.H / r.height : 1),
+                c:(ev.clientX - r.left) * (r.width ? secPanel.W / r.width : 1), g }
+            : { p:(ev.clientX - r.left) * (r.width ? secPanel.W / r.width : 1),
+                c:(ev.clientY - r.top) * (r.height ? secPanel.H / r.height : 1), g };
+        };
+        const inBar = (p, c, g) =>
+          p >= g.edges[0] - 4 && p <= g.edges[g.edges.length - 1] + 4 &&
+          (g.vertical ? (c >= g.barX - 6 && c <= g.barX + g.barW + 6)
+                      : (c >= g.barY - 6 && c <= g.barY + g.barH + 6));
+        const bandAt = (p, g) => {
+          for (let k = 0; k < S.layers.length; k++) if (p < g.edges[k + 1]) return k;
+          return S.layers.length - 1;
+        };
+        cv.addEventListener('pointerdown', ev => {
+          const o = axisPos(ev);
+          if (!inBar(o.p, o.c, o.g)) return;
+          ev.preventDefault();
+          drag = { from:bandAt(o.p, o.g) };
+          try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
+          cv.style.cursor = 'grabbing';
+        });
+        cv.addEventListener('pointermove', ev => {
+          const o = axisPos(ev);
+          if (!drag) { cv.style.cursor = inBar(o.p, o.c, o.g) ? 'grab' : ''; return; }
+          ev.preventDefault();
+          const to = bandAt(o.p, o.g);
+          if (to !== drag.from) {
+            const m = S.layers.splice(drag.from, 1)[0];
+            S.layers.splice(to, 0, m);
+            drag.from = to;
+            secPanel.draw();
+          }
+        });
+        const dropBand = () => { if (!drag) return; drag = null; cv.style.cursor = ''; render(); };
+        cv.addEventListener('pointerup', dropBand);
+        cv.addEventListener('pointercancel', dropBand);
+      }
+    }
 
     /* --- the result ------------------------------------------------------ */
     const lim = spec.limit;
@@ -5408,6 +5469,12 @@ function costPanel(host, cfg) {
     };
     grid.appendChild(mkNum(t('Element area'), S.area, t('m² — e.g. 120'), v => { S.area = v; }));
     grid.appendChild(mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; }));
+    grid.appendChild(el('div', null, [
+      el('label', { text:' ' }),
+      el('a', { class:'btn', href:cfg.link, target:'_blank', rel:'noopener noreferrer',
+        style:'display:block;text-align:center;text-decoration:none;padding:6px 9px',
+        text:t('Open the Gerador') + ' — ' + cfg.linkLabel })
+    ]));
     box.appendChild(el('div', { class:'costbox' }, [
       grid,
       el('div', null, [
@@ -8029,6 +8096,15 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.31.0: drag bands to reorder + arrow buttons + one-press Gerador button. */
+Object.assign(PT, {
+  'Open the Gerador': 'Abrir o Gerador'
+});
+/* v2.31.0: drag bands to reorder + arrow buttons. */
+Object.assign(PT, {
+  'Move this layer up': 'Subir esta camada',
+  'Move this layer down': 'Descer esta camada'
 });
 /* v2.30.0: inertia cap follows the highlighted EL row; excess marked. */
 Object.assign(PT, {
