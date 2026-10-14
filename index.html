@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.31.0',
+  version:     '2.32.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5286,6 +5286,497 @@ function collectSession() {
            site: JSON.parse(JSON.stringify(STATE.site)), tab: STATE.tab, state };
 }
 
+/* ==================== PowerPoint report export (v2.32.0) ====================
+   Self-contained .pptx writer (stored zip, no dependency) + a report of every
+   selection in the current assessment, styled like the course slides: dark
+   slate ground, amber metric boxes, a zone pill where the CASE pill sits. */
+const PPTX = (() => {
+  const EMU = 914400;
+  const SW = Math.round(13.333 * EMU), SH = Math.round(7.5 * EMU);
+  const C = { bg:'1B2730', panel:'243B46', line:'3A4F59', amber:'E8A33D', teal:'7FB3A3',
+              white:'FFFFFF', muted:'9AA7B0', box:'3A4034', green:'8FCB8F', red:'D98C8C' };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = bytes => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const enc = new TextEncoder();
+  let idc = 0;
+  const nid = () => ++idc + 1;
+  const X = v => Math.round(v * EMU);
+  // ---- text ----
+  const run = (t, o) => {
+    o = o || {};
+    return '<a:r><a:rPr lang="en-US" sz="' + Math.round((o.sz || 14) * 100) + '"' +
+      (o.b ? ' b="1"' : '') + (o.i ? ' i="1"' : '') +
+      '><a:solidFill><a:srgbClr val="' + (o.color || C.white) + '"/></a:solidFill></a:rPr>' +
+      '<a:t>' + esc(t) + '</a:t></a:r>';
+  };
+  const para = (runs, o) => {
+    o = o || {};
+    return '<a:p>' + (o.align ? '<a:pPr algn="' + o.align + '"/>' : '') +
+      runs.map(r => run(r.t, r)).join('') + '</a:p>';
+  };
+  const txBody = (paras, o) => {
+    o = o || {};
+    return '<p:txBody><a:bodyPr wrap="square" lIns="91440" rIns="91440" tIns="45720" bIns="45720"' +
+      (o.anchor ? ' anchor="' + o.anchor + '"' : '') + '/><a:lstStyle/>' +
+      paras.map(p => para(p.runs, p)).join('') + '</p:txBody>';
+  };
+  // ---- shapes ----
+  const shape = (o) => {
+    const id = nid();
+    return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="s' + id + '"/>' +
+      '<p:cNvSpPr><a:spLocks noChangeArrowheads="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>' +
+      '<p:spPr><a:xfrm><a:off x="' + X(o.x) + '" y="' + X(o.y) + '"/>' +
+      '<a:ext cx="' + X(o.w) + '" cy="' + X(o.h) + '"/></a:xfrm>' +
+      '<a:prstGeom prst="' + (o.round ? 'roundRect' : 'rect') + '"><a:avLst/></a:prstGeom>' +
+      (o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>') +
+      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '"><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
+              : '<a:ln><a:noFill/></a:ln>') +
+      '</p:spPr>' + txBody(o.paras || [], o) + '</p:sp>';
+  };
+  /* Tables are grids of plain text boxes, not DrawingML tables: every
+     renderer draws those, while table-style resolution varies. */
+  const table = (o) => {
+    const out = [];
+    let y = o.y;
+    o.rows.forEach((row, ri) => {
+      let x = o.x;
+      const rh = o.rowH || 0.34;
+      row.forEach((cell, ci) => {
+        const w = o.colW[ci];
+        const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
+        out.push(shape({ x, y, w, h:rh,
+          fill:ri === 0 ? C.panel : (ri % 2 ? '22313B' : C.bg),
+          line:1, lineColor:C.line, lnW:6350,
+          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || ri === 0,
+            color:cell.color || (ri === 0 ? C.amber : C.white) }], align:al }],
+          anchor:'ctr' }));
+        x += w;
+      });
+      y += rh;
+    });
+    return out.join('');
+  };
+  const bgRect = shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg });
+  // ---- package ----
+  function pack(slides) {
+    idc = 0;
+    const F = {};
+    const slideNames = slides.map((_, i) => 'ppt/slides/slide' + (i + 1) + '.xml');
+    F['[Content_Types].xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+      '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+      '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
+      '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+      slideNames.map(n => '<Override PartName="/' + n + '" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>').join('') +
+      '</Types>';
+    F['_rels/.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+      '</Relationships>';
+    const sldIds = slides.map((_, i) =>
+      '<p:sldId id="' + (256 + i) + '" r:id="rId' + (i + 3) + '"/>').join('');
+    F['ppt/presentation.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+      '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+      '<p:sldIdLst>' + sldIds + '</p:sldIdLst>' +
+      '<p:sldSz cx="' + SW + '" cy="' + SH + '" type="screen16x9"/>' +
+      '<p:notesSz cx="6858000" cy="9144000"/></p:presentation>';
+    let rels = '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>';
+    slides.forEach((_, i) => {
+      rels += '<Relationship Id="rId' + (i + 3) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' + (i + 1) + '.xml"/>';
+    });
+    F['ppt/_rels/presentation.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '</Relationships>';
+    F['ppt/slideMasters/slideMaster1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr>' +
+      '<a:solidFill><a:srgbClr val="' + C.bg + '"/></a:solidFill></p:bgPr></p:bg>' +
+      '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+      '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + SW + '" cy="' + SH + '"/>' +
+      '<a:chOff x="0" y="0"/><a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr>' +
+      '</p:spTree></p:cSld><p:clrMap bk1="000000" bk2="FFFFFF" tx1="000000" tx2="FFFFFF" ' +
+      'accent1="FFFFFF" accent2="000000" accent3="FFFFFF" accent4="000000" accent5="FFFFFF" ' +
+      'accent6="000000" hlink="FFFFFF" folHlink="FFFFFF"/>' +
+      '<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4400" b="1"/></a:lvl1pPr></p:titleStyle>' +
+      '<p:bodyStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>' +
+      '<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>';
+    F['ppt/slideMasters/_rels/slideMaster1.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>' +
+      '</Relationships>';
+    F['ppt/slideLayouts/slideLayout1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">' +
+      '<p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/>' +
+      '<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/>' +
+      '<a:ext cx="' + SW + '" cy="' + SH + '"/><a:chOff x="0" y="0"/>' +
+      '<a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>' +
+      '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
+    F['ppt/slideLayouts/_rels/slideLayout1.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>' +
+      '</Relationships>';
+    F['ppt/theme/theme1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Advisor">' +
+      '<a:themeElements><a:clrScheme name="Advisor">' +
+      '<a:dk1><a:srgbClr val="1B2730"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>' +
+      '<a:dk2><a:srgbClr val="243B46"/></a:dk2><a:lt2><a:srgbClr val="9AA7B0"/></a:lt2>' +
+      '<a:accent1><a:srgbClr val="E8A33D"/></a:accent1><a:accent2><a:srgbClr val="7FB3A3"/></a:accent2>' +
+      '<a:accent3><a:srgbClr val="8FCB8F"/></a:accent3><a:accent4><a:srgbClr val="D98C8C"/></a:accent4>' +
+      '<a:accent5><a:srgbClr val="3A4034"/></a:accent5><a:accent6><a:srgbClr val="33454F"/></a:accent6>' +
+      '<a:hlink><a:srgbClr val="E8A33D"/></a:hlink><a:folHlink><a:srgbClr val="9AA7B0"/></a:folHlink>' +
+      '</a:clrScheme><a:fmtScheme name="Advisor"><a:fillStyleLst>' +
+      '<a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:fillStyleLst>' +
+      '<a:lnStyleLst><a:ln w="19050"><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:ln></a:lnStyleLst>' +
+      '<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>' +
+      '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="dk1"/></a:solidFill></a:bgFillStyleLst>' +
+      '</a:fmtScheme></a:themeElements></a:theme>';
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    F['docProps/core.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+      'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
+      'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      '<dc:title>Construction Advisor — envelope report</dc:title>' +
+      '<dc:creator>Nuno Dinis Cortiços</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' +
+      now + '</dcterms:created></cp:coreProperties>';
+    F['docProps/app.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
+      'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+      '<Application>Construction Advisor</Application><Slides>' + slides.length + '</Slides></Properties>';
+    const head = (shapes) =>
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+      '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+      '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + SW + '" cy="' + SH + '"/>' +
+      '<a:chOff x="0" y="0"/><a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr>' +
+      shapes.join('') + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+    slides.forEach((shapes, i) => {
+      F[slideNames[i]] = head(shapes);
+      F['ppt/slides/_rels/slide' + (i + 1) + '.xml.rels'] =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
+        '</Relationships>';
+    });
+    // ---- stored zip ----
+    const names = Object.keys(F);
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    names.forEach(nm => {
+      const data = enc.encode(F[nm]);
+      const crc = crc32(data);
+      const nl = enc.encode(nm);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true);
+      lh.setUint16(10, 0x21, true);
+      lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true);
+      lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nl.length, true);
+      lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), nl, data);
+      central.push({ nm:nl, crc, len:data.length, offset });
+      offset += 30 + nl.length + data.length;
+    });
+    const csize = central.reduce((a, c) => a + 46 + c.nm.length, 0);
+    const cstart = offset;
+    central.forEach(c => {
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint16(12, 0x21, true);
+      ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, c.crc, true);
+      ch.setUint32(20, c.len, true);
+      ch.setUint32(24, c.len, true);
+      ch.setUint16(28, c.nm.length, true);
+      ch.setUint16(30, 0, true);
+      ch.setUint16(32, 0, true);
+      ch.setUint16(34, 0, true);
+      ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true);
+      ch.setUint32(42, c.offset, true);
+      chunks.push(new Uint8Array(ch.buffer), c.nm);
+    });
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, names.length, true);
+    end.setUint16(10, names.length, true);
+    end.setUint32(12, csize, true);
+    end.setUint32(16, cstart, true);
+    chunks.push(new Uint8Array(end.buffer));
+    return new Blob(chunks, { type:'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+  }
+  return { build:pack, C, shape, table, bgRect, esc };
+})();
+
+/* ================= PowerPoint report (selections + verdicts) ================= */
+function exportPptx() {
+  if (!STATE.site) { toast(t('Nothing to export yet')); return; }
+  try {
+    const Z = STATE.zone, S = STATE.site;
+    const R = PPTX, C = R.C;
+    const date = new Date().toLocaleDateString(localeTag());
+    const S2 = [];
+    const head = (title, sub, pill) => {
+      const o = [R.bgRect,
+        R.shape({ x:0.6, y:0.35, w:10.2, h:0.75, paras:[{ runs:[{ t:title, sz:30, b:1 }] }] }),
+        R.shape({ x:0.6, y:1.05, w:10.2, h:0.45, paras:[{ runs:[{ t:sub, sz:15, color:C.amber }] }] })];
+      if (pill) o.push(R.shape({ x:11.05, y:0.35, w:1.68, h:0.45, fill:C.amber, round:1,
+        paras:[{ runs:[{ t:pill, sz:13, b:1, color:'1B2730' }] }], anchor:'ctr' }));
+      return o;
+    };
+    const metric = (x, y, w, big, cap) => R.shape({ x, y, w, h:1.55, fill:C.box, line:1, lineColor:C.amber,
+      paras:[{ runs:[{ t:big, sz:40, b:1, color:C.amber }] }, { runs:[{ t:cap, sz:12 }] }], anchor:'ctr' });
+    const verdict = (v, lim) => {
+      const ok = v !== null && v !== undefined && v <= lim + 1e-9;
+      return { t:ok ? t('Meets the limit') : t('Above the limit'), c:ok ? C.green : C.red };
+    };
+    const layerRows = A => A.parts.map((p, i) => {
+      const L = A.layers[i];
+      return [
+        { t:L.air ? t('Unventilated air space') : t(MAT[L.key].name) },
+        { t:fmt(layerThickness(L) * 1000, 0) },
+        { t:fmt(p.r, 2) },
+        { t:fmt(p.m, 0) }
+      ];
+    });
+    const layerHead = [
+      { t:t('Layer, from outside inwards'), b:1 }, { t:t('Thickness'), b:1 },
+      { t:'R', b:1 }, { t:t('Mass'), b:1 }
+    ];
+    const uline = (A, lim, w) => {
+      const v = verdict(A.U, lim);
+      return R.shape({ x:0.6, y:w, w:7.6, h:0.5, paras:[{ runs:[
+        { t:'U = ' + fmt(A.U, 3) + '  ·  ' + t('Limit') + ' ' + fmt(lim, 2), sz:14 },
+        { t:'   ' + v.t, sz:14, b:1, color:v.c }] }] });
+    };
+    // ---- 1. title ----
+    S2.push(head(APP.name, t('Envelope report') + ' — ' + (S.conc || S.nuts), Z.wz + ' ' + Z.sz).concat([
+      R.shape({ x:0.6, y:2.1, w:12.13, h:0.5, paras:[{ runs:[{ t:
+        (S.conc || S.nuts) + ' · ' + fmt(S.alt, 0) + ' m', sz:16 }] }] }),
+      R.shape({ x:0.6, y:6.35, w:12.13, h:0.4, paras:[{ runs:[
+        { t:t('Generated by') + ' ' + APP.name + ' ' + APP.version + ' · ' + date, sz:11, color:C.muted }] }] })
+    ]));
+    // ---- 2. site & climate ----
+    S2.push(head(t('Site and climate'), (S.conc || S.nuts) + ' · ' + fmt(S.alt, 0) + ' m', Z.wz + ' ' + Z.sz).concat([
+      R.table({ x:0.6, y:1.9, colW:[3.4, 8.73], rowH:0.42, rows:[
+        [{ t:t('Municipality'), b:1 }, { t:S.conc || '—' }],
+        [{ t:t('NUTS III'), b:1 }, { t:S.nuts || '—' }],
+        [{ t:t('Altitude'), b:1 }, { t:fmt(S.alt, 0) + ' m' }],
+        [{ t:t('Winter zone'), b:1 }, { t:Z.wz + ' · ' + fmt(Z.GD, 0) + ' ' + t('Heating degree-days') }],
+        [{ t:t('Summer zone'), b:1 }, { t:Z.sz }]
+      ] })
+    ]));
+    // ---- 3. roofs ----
+    {
+      const A = assemble(ROOF_STATE.layers, 'up', 'ext');
+      const lim = umax(Z, 'roof');
+      S2.push(head(t('Roofs'), t('Layer, from outside inwards'), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
+          rows:[layerHead].concat(layerRows(A)) }),
+        metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25)
+      ]));
+    }
+    // ---- 4. floors ----
+    {
+      const A = assemble(PAV_STATE.layers, 'down', 'ext');
+      const B = PAV_STATE.below === 'ext' ? 1 : bztu(PAV_STATE.ratio, PAV_STATE.vol, PAV_STATE.vent).b;
+      const lim = PAV_STATE.below === 'ext' ? umax(Z, 'roof') : umaxInterior(Z, 'roof', B);
+      const F = FLR_STATE;
+      const GA = assemble(F.layers, 'down', 'ext');
+      const Bb = bPrime(F.area, F.perim);
+      const rf = GA.R - GA.rsi - GA.rse;
+      const Ub = F.mode === 'cont' ? ubfContinuous(Bb, F.z, rf).u : ubfPerimeter(Bb, F.d, rf).u;
+      const gnm = (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME).ground;
+      S2.push(head(t('Floors'), t('Layer, from outside inwards'), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.6, 1.1, 1.3, 1.3], rowH:0.3,
+          rows:[layerHead].concat(layerRows(A)) }),
+        metric(9.5, 1.9, 3.23, fmt(A.U, 2), 'U W/(m²·°C)'),
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.3 + 0.2),
+        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.3 + 0.85, w:12.13, h:0.45, paras:[{ runs:[
+          { t:gnm + ' — B′ = ' + fmt(Bb, 1) + ' m  ·  Ubf = ' + fmt(Ub, 2) + ' W/(m²·°C)', sz:12 }] }] })
+      ]));
+    }
+    // ---- 5. external walls ----
+    {
+      const A = assemble(WEXT_STATE.layers, 'h', 'ext');
+      const lim = umax(Z, 'wall');
+      S2.push(head(t('External walls'), t('Layer, from outside inwards'), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
+          rows:[layerHead].concat(layerRows(A)) }),
+        metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25)
+      ]));
+    }
+    // ---- 6. internal walls ----
+    {
+      const W = WINT_STATE;
+      const calc = bztu(W.ratio, W.vol, W.vent);
+      const B = W.kind === 'adj' ? 0.6 : W.kind === 'strong' ? 1.0 : calc.b;
+      const lim = umaxInterior(Z, 'wall', B);
+      const A = assemble(W.layers, 'h', 'int');
+      const elRow = currentEL(W.kind);
+      const cap = elRow === 0 ? 150 : 300;
+      const UM = usefulMass(A, cap);
+      const itW = UM.contrib * W.swall / Math.max(W.ap, 1e-6);
+      S2.push(head(t('Internal walls'), t('Layer, from outside inwards'), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.32,
+          rows:[layerHead].concat(layerRows(A)) }),
+        metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.32 + 0.2),
+        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.32 + 0.85, w:12.13, h:0.5, paras:[{ runs:[
+          { t:'Msi = ' + fmt(UM.msi, 0) + ' / ' + t('cap') + ' ' + cap +
+            (UM.msi > cap ? ' — ' + t('Excess discarded') + ' ' + fmt(UM.msi - cap, 0) : ' — ' + t('Everything counts')) +
+            '  ·  It = ' + fmt(itW, 0) + ' (' + t(inertiaOf(itW).name) + ')', sz:12 }] }] })
+      ]));
+    }
+    // ---- 7. windows ----
+    {
+      const W = WIN_STATE, G = GLAZING[W.glaz], F = FRAMES.find(f => f.key === W.frame);
+      const fg = W.quad ? F.fgq : F.fg;
+      const uw = F.uf === null ? G.ug : fg * G.ug + (1 - fg) * F.uf;
+      const lim = umax(Z, 'glaz', W.use);
+      const dn = DELTA_R.find(d => d.key === W.dev);
+      S2.push(head(t('Windows'), t(GLAZ_FAMILY[G.f].name), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[2.8, 5.6], rowH:0.42, rows:[
+          [{ t:t('Glazing'), b:1 }, { t:t(GLAZ_FAMILY[G.f].name) + ' — Ug ' + fmt(G.ug, 1) + ', g ' + fmt(G.g, 2) }],
+          [{ t:t('Frame'), b:1 }, { t:t(F.name) + ' — Fg ' + fmt(fg, 2) + (F.uf === null ? '' : ', Uf ' + fmt(F.uf, 1)) }],
+          [{ t:t('Orientation'), b:1 }, { t:COMPASS8[W.ori] }],
+          [{ t:t('Night shutter'), b:1 }, { t:dn ? dn.name : W.dev }]
+        ] }),
+        metric(9.2, 1.9, 3.5, fmt(uw, 2), 'Uw W/(m²·°C)'),
+        R.shape({ x:9.0, y:3.7, w:3.73, h:0.5, paras:[{ runs:((() => {
+          const v = verdict(uw, lim);
+          return [{ t:'Uw = ' + fmt(uw, 2) + '  ·  ' + t('Limit') + ' ' + fmt(lim, 2) +
+            ' (' + t(W.use === 'cs' ? 'Commerce and services' : 'Dwelling') + ')', sz:13 },
+            { t:'   ' + v.t, sz:13, b:1, color:v.c }];
+        })()) }] })
+      ]));
+    }
+    // ---- 8. solar protections ----
+    {
+      const D = SHD2_STATE;
+      const G = GLAZING[clamp(D.glaz, 0, GLAZING.length - 1)];
+      const ref = D.dbl ? 0.75 : 0.85;
+      const ci = COLOURS.findIndex(c => c.key === D.colour);
+      const act = SHD2_DEV.filter(d => D.devs.includes(d.key));
+      const rows = act.map((d, k) => ({ d, n:k + 1, v:d[D.dbl ? 'd' : 's'][ci] }));
+      const opAt = rows.findIndex(r => r.d.op);
+      const counted = opAt < 0 ? rows : rows.slice(0, opAt + 1);
+      let ord = 1;
+      counted.forEach(r => { if (r.v !== null && r.v !== undefined) ord *= r.v / ref; });
+      const missing = counted.some(r => r.v === null || r.v === undefined);
+      const gt = missing ? null : G.g * ord;
+      const limG = gtotMax(Z, D.inertia);
+      const stack = act.reduce((a, d) => a + SHD2_PRICE[d.key].eur, 0);
+      const devLines = act.length
+        ? act.map(d => rows.find(r => r.d === d).n + '. ' + t(d.name)).join('   ·   ')
+        : '—';
+      const v = gt === null ? null : verdict(gt, limG);
+      S2.push(head(t('Solar protections'), t('Colour of the devices') + ': ' + t(COLOURS[ci].name), Z.sz).concat([
+        R.shape({ x:0.6, y:1.9, w:8.0, h:1.0, paras:[{ runs:[{ t:devLines, sz:12 }] }] }),
+        R.shape({ x:0.6, y:3.05, w:7.6, h:0.5, paras:[{ runs:[
+          { t:gt === null ? t('no value') : 'g tot = ' + fmt(gt, 2) + '  ·  ' + t('Limit') + ' ' + fmt(limG, 2), sz:14 },
+          v ? { t:'   ' + v.t, sz:14, b:1, color:v.c } : { t:'' }] }] }),
+        metric(8.9, 1.9, 3.8, '~' + stack, 'EUR/m²')
+      ]));
+    }
+    // ---- 9. ventilation ----
+    {
+      const V = IAQ_VENT_STATE;
+      const row = (lab, val) => [{ t:lab, b:1 }, { t:val }];
+      const yn = v => t(v ? 'yes' : 'no');
+      const L = [];
+      if (V.ap !== undefined) L.push(row(t('Floor area of the space'), fmt(V.ap, 0) + ' m²'));
+      if (V.pd !== undefined) L.push(row(t('Ceiling height'), fmt(V.pd, 2) + ' m'));
+      if (V.hedif !== undefined) L.push(row(t('Building height'), fmt(V.hedif, 1) + ' m'));
+      if (V.dobs !== undefined) L.push(row(t('Distance to the obstacle, D obs'), fmt(V.dobs, 1) + ' m'));
+      if (V.hobs !== undefined) L.push(row(t('Height of the obstacle, H obs'), fmt(V.hobs, 1) + ' m'));
+      if (V.coastal !== undefined) L.push(row(t('Within 5 km of the coast'), yn(V.coastal)));
+      if (V.rough !== undefined) L.push(row(t('Roughness'), String(V.rough)));
+      if (V.protection !== undefined) L.push(row(t('Façade protection'), String(V.protection)));
+      if (V.side !== undefined) L.push(row(t('This façade is'), t(V.side === 'windward' ? 'Windward' : 'Leeward')));
+      S2.push(head(t('Indoor air quality'), t('Exposure and the air path'), Z.wz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.6, 7.53], rowH:0.42, rows:L })
+      ]));
+    }
+    // ---- 10. budget ----
+    {
+      const live = budgetTotals();
+      const nm = k => (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k];
+      S2.push(head(t('Budget'), t('Area × unit price, per element'), Z.wz + ' ' + Z.sz).concat([
+        R.table({ x:0.6, y:1.9, colW:[4.0, 1.4, 1.8, 1.8], rowH:0.4, rows:[
+          [{ t:t('Item'), b:1 }, { t:t('Area (m²)'), b:1 }, { t:t('Unit price (€/m²)'), b:1 }, { t:t('Total (€)'), b:1 }]
+        ].concat(BUDGET_ORDER.map(k => {
+          const s = live.per[k] || {};
+          return [{ t:nm(k) },
+            { t:s.area === null || s.area === undefined ? '—' : fmt(s.area, 1) },
+            { t:s.price === null || s.price === undefined ? '—' : euro(s.price) },
+            { t:s.total === null || s.total === undefined ? '—' : euro(s.total) }];
+        })) }),
+        metric(0.6, 5.0, 5.0, fmt(live.sum, 2) + ' €', t('Overall budget'))
+      ]));
+    }
+    // ---- 11. closing ----
+    S2.push(head(t('Methods and sources'), t('Full methods and sources live in the application footer.'), APP.version).concat([
+      R.shape({ x:0.6, y:2.0, w:12.13, h:0.6, paras:[{ runs:[{ t:
+        t('Generated by') + ' ' + APP.name + ' · Nuno Dinis Cortiços · ' + date, sz:14 }] }] })
+    ]));
+    download(PPTX.build(S2), slugify(sitePrefix() + 'report') + '.pptx');
+    toast(t('Report exported'));
+  } catch (e) { toast('Export failed: ' + e.message); }
+}
+
 function saveSession() {
   if (!STATE.site) { toast('Nothing to save yet'); return; }
   const name = slugify(sitePrefix() + 'progress') + '.json';
@@ -7075,6 +7566,16 @@ function mountApp(site, keepTab) {
       onclick: () => activate(tab.key) }));
   });
   tl.appendChild(sv);
+    let px = document.querySelector('#btnPptx');
+    if (!px) {
+      px = el('button', { class:'tab cadbtn', id:'btnPptx', 'data-t':'btnPptx' });
+      px.title = 'Export the report as a PowerPoint file';
+      px.dataset.en = 'PowerPoint';
+      px.innerHTML = (LANG === 'pt' && STATIC_PT['btnPptx'] !== undefined) ? STATIC_PT['btnPptx'] : 'PowerPoint';
+      px.addEventListener('click', exportPptx);
+    }
+    px.className = 'tab cadbtn'; px.hidden = false;
+    tl.appendChild(px);
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
   const wanted = keepTab === 'pavements' ? 'floors' : keepTab === 'climate' ? 'materials' : keepTab;
@@ -7159,6 +7660,7 @@ initSetup();
 
 /* --- the static markup of the page, keyed by data-t --------------------- */
 Object.assign(STATIC_PT, {
+  btnPptx: 'PowerPoint',
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
   setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, abrindo depois um mosaico de materiais — naturais e industrializados, próprios da região — antes de percorrer a envolvente elemento a elemento perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
@@ -8096,6 +8598,27 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.32.0: PowerPoint report export. */
+Object.assign(PT, {
+  'Envelope report': 'Relatório da envolvente',
+  'Site and climate': 'Local e clima',
+  'Municipality': 'Concelho',
+  'Altitude': 'Altitude',
+  'Heating degree-days': 'Graus-dias de aquecimento',
+  'NUTS III': 'NUTS III',
+  'Night shutter': 'Dispositivo noturno',
+  'Budget': 'Orçamento',
+  'Total': 'Total',
+  'Generated by': 'Gerado por',
+  'Methods and sources': 'Métodos e fontes',
+  'Nothing to export yet': 'Ainda nada para exportar',
+  'Report exported': 'Relatório exportado',
+  'Full methods and sources live in the application footer.': 'Métodos e fontes completos no rodapé da aplicação.',
+  'Exposure and the air path': 'Exposição e o percurso do ar',
+  'Area × unit price, per element': 'Área × preço unitário, por elemento',
+  'Dwelling': 'Habitação',
+  'Commerce and services': 'Comércio e serviços',
 });
 /* v2.31.0: drag bands to reorder + arrow buttons + one-press Gerador button. */
 Object.assign(PT, {
