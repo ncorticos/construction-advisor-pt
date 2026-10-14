@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.33.0',
+  version:     '2.34.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5435,10 +5435,10 @@ const PPTX = (() => {
         const w = o.colW[ci];
         const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
         out.push(shape({ x, y, w, h:rh,
-          fill:ri === 0 ? C.panel : (ri % 2 ? '22313B' : C.bg),
+          fill:((o.r0 || 0) + ri) === 0 ? C.panel : (((o.r0 || 0) + ri) % 2 ? '22313B' : C.bg),
           line:1, lineColor:C.line, lnW:6350,
-          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || ri === 0,
-            color:cell.color || (ri === 0 ? C.amber : C.white) }], align:al }],
+          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || ((o.r0 || 0) + ri) === 0,
+            color:cell.color || (((o.r0 || 0) + ri) === 0 ? C.amber : C.white) }], align:al }],
           anchor:'ctr' }));
         x += w;
       });
@@ -5692,7 +5692,50 @@ function exportPptx() {
         [{ t:t('Summer zone'), b:1 }, { t:Z.sz }]
       ] })
     ]));
-    // ---- 3. roofs ----
+    // ---- 3. materials selected ----
+    {
+      const asm = [
+        ['roof', ROOF_STATE], ['pav', PAV_STATE], ['ground', FLR_STATE],
+        ['wext', WEXT_STATE], ['wint', WINT_STATE]
+      ];
+      const nm = k => (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k];
+      const seen = {};
+      asm.forEach(([bk, ST]) => (ST.layers || []).forEach(L => {
+        if (L.air || !L.key || !MAT[L.key]) return;
+        if (!seen[L.key]) seen[L.key] = { uses:[] };
+        if (seen[L.key].uses.indexOf(bk) < 0) seen[L.key].uses.push(bk);
+      }));
+      const sh = { roof:['Roof', 'Cobertura'], pav:['Floor', 'Pavimento'], ground:['Ground', 'Térreo'],
+        wext:['Ext. wall', 'P. exterior'], wint:['Int. wall', 'P. interior'] };
+      const snm = k => (LANG === 'pt' ? sh[k][1] : sh[k][0]);
+      const mhead = [{ t:t('Material'), b:1 }, { t:t('Used in'), b:1 }, { t:'λ', b:1 }];
+      const mrows = Object.keys(seen).map(k => {
+        const M = MAT[k];
+        const lam = (typeof lamEq === 'function') ? lamEq(M) : M.lam;
+        return [{ t:t(M.name) },
+          { t:seen[k].uses.map(snm).join(' + ') },
+          { t:(lam === null || lam === undefined) ? '—' : fmt(lam, 3) }];
+      });
+      const mcolW = [5.4, 4.2, 2.53], mch = [58, 45, 26];
+      const mhs = [mhead].concat(mrows).map((r, i) =>
+        i === 0 ? 0.34 : Math.min(0.9, 0.3 * Math.max.apply(null, r.map((c, ci) =>
+          Math.max(1, Math.ceil(String(c.t).length / mch[ci]))))));
+      const live = budgetTotals();
+      const idea = BUDGET_ORDER.map(k => {
+        const s = live.per[k] || {};
+        return nm(k) + ': ' + ((s.total === null || s.total === undefined) ? '—' : euro(s.total));
+      }).join('   ·   ');
+      let mshapes = [], my = 1.9;
+      [mhead].concat(mrows).forEach((r, i) => {
+        mshapes.push(R.table({ x:0.6, y:my, colW:mcolW, rowH:mhs[i], rows:[r], r0:i }));
+        my += mhs[i];
+      });
+      S2.push(head(t('Materials selected'), t('Every material chosen in the assemblies, and the budget idea'), Z.wz + ' ' + Z.sz).concat(mshapes.concat([
+        R.shape({ x:0.6, y:my + 0.1, w:12.13, h:0.6, paras:[{ runs:[
+          { t:idea + '   ·   ' + t('Overall budget') + ': ' + euro(live.sum), sz:12 }] }] })
+      ])));
+    }
+    // ---- 4. roofs ----
     {
       const A = assemble(ROOF_STATE.layers, 'up', 'ext');
       const lim = umax(Z, 'roof');
@@ -6001,9 +6044,61 @@ function budgetTotals() {
   });
   return { per, sum, n };
 }
+/* Closest Gerador unit for an element, read off the student's own assembly
+   so the button lands on the price, not on a chapter index. Chapter links in
+   COST_PANELS stay as the fallback. */
+const GDP_U = {
+  roofTile: GDP_BASE + '/Coberturas/Inclinadas/Telhados/Cobertura_inclinada_de_telhas.html',
+  pavCer: GDP_BASE + '/Revestimentos/Pavimentos/De_pecas_ceramicas/RSG110_Pavimento_interior_de_pecas_de_gres.html',
+  groundBase: GDP_BASE + '/Revestimentos/Pavimentos/Bases_de_pavimento/Base_de_argamassa_de_cimento.html',
+  wextCavity: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFZ_Pano_exterior_para_revestir_em/FFZ010_Pano_exterior_de_fachada_dupla__de_.html',
+  wextSingle: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/Fachada_simples_para_revestir/FFF010_Fachada_simples__de_alvenaria_de_ti.html',
+  wintBrick: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFQ_Pano_para_revestir_em_parede_d/FFQ010_Pano_de_parede_divisoria_interior__.html',
+  wintGesso: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Paredes_divisorias_de_placas.html',
+  winPVC: GDP_BASE + '/Vaos/Caixilharias/De_PVC/Caixilharia_exterior_em_PVC.html',
+  winAlu: GDP_BASE + '/Vaos/Caixilharias/De_aluminio.html',
+  winWood: GDP_BASE + '/Vaos/Caixilharias/De_madeira.html'
+};
+function closestPrice(key) {
+  const F = GDP_BASE;
+  const has = (ST, sub) => (ST.layers || []).some(L => !L.air && L.key && L.key.indexOf(sub) >= 0);
+  if (key === 'roof') {
+    const tiled = (ROOF_STATE.layers || []).some(L => !L.air && L.key &&
+      (L.key.indexOf('telh') >= 0 || L.key.indexOf('ardos') >= 0 || L.key === 'ceramico'));
+    return tiled
+      ? { link:GDP_U.roofTile, linkLabel:'Q · Cobertura inclinada de telhas' }
+      : { link:F + '/Coberturas.html', linkLabel:'Q · Coberturas' };
+  }
+  if (key === 'pav') return { link:GDP_U.pavCer, linkLabel:'R · Pavimento de grés esmaltado' };
+  if (key === 'ground') return { link:GDP_U.groundBase, linkLabel:'R · Base de argamassa de cimento' };
+  if (key === 'wext') {
+    const cavity = (WEXT_STATE.layers || []).some(L => L.air);
+    return cavity
+      ? { link:GDP_U.wextCavity, linkLabel:'F · Pano exterior de fachada dupla' }
+      : { link:GDP_U.wextSingle, linkLabel:'F · Fachada simples de tijolo' };
+  }
+  if (key === 'wint') {
+    const gesso = (WINT_STATE.layers || []).some(L => !L.air && L.key === 'gesso');
+    const masonry = (WINT_STATE.layers || []).some(L => !L.air && L.key &&
+      (L.key.indexOf('tijolo') === 0 || L.key.indexOf('bloco') === 0));
+    return (gesso && !masonry)
+      ? { link:GDP_U.wintGesso, linkLabel:'F · Paredes divisórias de placas' }
+      : { link:GDP_U.wintBrick, linkLabel:'F · Parede divisória de tijolo' };
+  }
+  if (key === 'win') {
+    const fr = (WIN_STATE.frame || '');
+    if (fr === 'metal') return { link:GDP_U.winAlu, linkLabel:'L · Caixilharias de alumínio' };
+    if (fr === 'mad') return { link:GDP_U.winWood, linkLabel:'L · Caixilharias de madeira' };
+    if (fr === 'pvcmad') return { link:GDP_U.winPVC, linkLabel:'L · Caixilharia exterior em PVC' };
+    return { link:F + '/Vaos.html', linkLabel:'L · Vãos' };
+  }
+  return null;
+}
 /* One quantity/budget panel. cfg: {key, link, linkLabel, unitHint}. */
 function costPanel(host, cfg) {
   const S = BUDGET_STATE[cfg.key];
+  const near = closestPrice(cfg.key) || {};
+  const blink = near.link || cfg.link, blabel = near.linkLabel || cfg.linkLabel;
   const box = el('div');
   host.appendChild(box);
   function render() {
@@ -6039,9 +6134,9 @@ function costPanel(host, cfg) {
     grid.appendChild(mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; }));
     grid.appendChild(el('div', null, [
       el('label', { text:' ' }),
-      el('a', { class:'btn', href:cfg.link, target:'_blank', rel:'noopener noreferrer',
+      el('a', { class:'btn', href:blink, target:'_blank', rel:'noopener noreferrer',
         style:'display:block;text-align:center;text-decoration:none;padding:6px 9px',
-        text:t('Open the Gerador') + ' — ' + cfg.linkLabel })
+        text:t('Open the Gerador') + ' — ' + blabel })
     ]));
     box.appendChild(el('div', { class:'costbox' }, [
       grid,
@@ -6054,7 +6149,7 @@ function costPanel(host, cfg) {
           el('span', { html:t('Overall budget') + ' (' + t(B.n + ' of ' + BUDGET_ORDER.length + ' priced items') + '): <b>' + euro(B.sum) + '</b>' }),
           el('span', { html:'<span style="color:var(--muted)">' + t('Visiting each tab refreshes this total.') + '</span>' })
         ]),
-        el('p', { class:'costlink', html:t('Reference price at') + ' <a href="' + cfg.link + '" target="_blank" rel="noopener noreferrer">' + cfg.linkLabel + '</a>'
+        el('p', { class:'costlink', html:t('Reference price at') + ' <a href="' + blink + '" target="_blank" rel="noopener noreferrer">' + blabel + '</a>'
           + ' — Gerador de Preços, CYPE. ' + t(cfg.unitHint || '')
           + ' ' + t('Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.') })
       ])
@@ -6599,7 +6694,7 @@ function buildMaterials(host) {
     statCard(t('Roofs') + ' U ' + t('máx'), fmt(limR, 2), 'W/(m²·°C)', Z.wz),
     statCard(t('External walls') + ' U ' + t('máx'), fmt(limW, 2), 'W/(m²·°C)', Z.wz),
     statCard(t('Floors') + ' U ' + t('máx'), fmt(limF, 2), 'W/(m²·°C)', Z.wz),
-    statCard(t('Windows') + ' U<sub>w,máx</sub>', fmt(limG, 2), 'W/(m²·°C)', Z.wz),
+    statCard(t('Windows') + ' Uw,máx', fmt(limG, 2), 'W/(m²·°C)', Z.wz),
     statCard(t('In the library'), '33', null, '11 Natural · 22 Industrial')
   ], 3));
   host.appendChild(hint('mat-zone',
@@ -8687,6 +8782,12 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.34.0: closest-price deep links, PPTX materials slide, Windows card fix. */
+Object.assign(PT, {
+  'Materials selected': 'Materiais escolhidos',
+  'Every material chosen in the assemblies, and the budget idea': 'Todos os materiais escolhidos nas soluções, e a ideia de custo',
+  'Used in': 'Usado em'
 });
 /* v2.33.0: Undo button (PT only — not carried to the PL fork). */
 Object.assign(PT, {
