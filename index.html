@@ -614,7 +614,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.32.0',
+  version:     '2.33.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -717,6 +717,80 @@ function toast(msg) {
   const n = $('#toast'); n.textContent = t(msg); n.classList.add('on');
   clearTimeout(toast._t); toast._t = setTimeout(() => n.classList.remove('on'), 2200);
 }
+
+/* ---------------- Undo (v2.33.0, PT only) ----------------
+   Snapshot history over STATE_REGISTRY: every settled change pushes the
+   state it replaced, so one press walks the student one step back.
+   Bursts (typing, drags) coalesce through a time gate; the stack is capped.
+   Language switches change nothing, so the equality check lets them pass. */
+const UNDO = { stack:[], prev:null, t:0, MAX:60, GAP:1500 };
+function snapRegistry() { return JSON.stringify(STATE_REGISTRY); }
+function undoRefreshBtn() {
+  const b = document.querySelector('#btnUndo');
+  if (b) b.disabled = !UNDO.stack.length;
+}
+function checkpoint() {
+  try {
+    const s = snapRegistry();
+    if (s === UNDO.prev) return;
+    const now = Date.now();
+    if (UNDO.prev === null) { UNDO.prev = s; UNDO.t = now; return; }
+    if (now - UNDO.t > UNDO.GAP) {
+      UNDO.stack.push(UNDO.prev);
+      if (UNDO.stack.length > UNDO.MAX) UNDO.stack.splice(0, UNDO.stack.length - UNDO.MAX);
+    }
+    UNDO.prev = s; UNDO.t = now;
+    undoRefreshBtn();
+  } catch (e) {}
+}
+function undoReset() {
+  UNDO.stack.length = 0;
+  try { UNDO.prev = snapRegistry(); } catch (e) { UNDO.prev = null; }
+  UNDO.t = 0;
+  undoRefreshBtn();
+}
+function rebuildCurrentPage() {
+  const tab = TABS.find(t => t.key === STATE.tab);
+  const sect = tab && document.querySelector('#page-' + tab.key);
+  if (!tab || !sect) return;
+  PANELS = PANELS.filter(p => {
+    if (sect.contains(p.root)) {
+      if (p.ro) p.ro.disconnect();
+      if (p.io) p.io.disconnect();
+      return false;
+    }
+    return true;
+  });
+  sect.innerHTML = '';
+  delete sect.dataset.built;
+  sect.dataset.built = '1';
+  try { tab.build(sect); glossify(sect); glossBind(sect); }
+  catch (err) {
+    console.error(err);
+    sect.appendChild(el('div', { class:'warn',
+      text:'This view could not be built: ' + err.message }));
+  }
+  requestAnimationFrame(redrawVisiblePanels);
+  setTimeout(redrawVisiblePanels, 150);
+}
+function undoLast() {
+  const s = UNDO.stack.pop();
+  if (!s) { toast(t('Nothing to undo')); return; }
+  let data = null;
+  try { data = JSON.parse(s); } catch (e) { data = null; }
+  if (!data) { toast(t('Nothing to undo')); return; }
+  for (const k in STATE_REGISTRY) {
+    const obj = STATE_REGISTRY[k];
+    for (const f in obj) delete obj[f];
+    if (data[k] && typeof data[k] === 'object')
+      Object.assign(obj, JSON.parse(JSON.stringify(data[k])));
+  }
+  UNDO.prev = s; UNDO.t = Date.now();
+  undoRefreshBtn();
+  rebuildCurrentPage();
+  toast(t('Undone'));
+}
+
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = el('a', { href: url, download: name });
@@ -2585,8 +2659,9 @@ function rebuildable(host, build) {
   const run = () => {
     const old = Array.from(host.childNodes);
     const frag = document.createDocumentFragment();
+    const checked = () => { checkpoint(); run(); };
     try {
-      build(frag, run);
+      build(frag, checked);
     } catch (err) {
       console.error(err);
       host.appendChild(el('div', { class:'warn',
@@ -3130,6 +3205,7 @@ function assemblyEditor(host, spec) {
         [fmt(UM.rInner, 2), fmt(UM.ri, 1)]));
     }
 
+    checkpoint();
     if (spec.onchange) spec.onchange(A);
   }
   render();
@@ -5820,7 +5896,7 @@ function loadSessionFile(file) {
     const result = applySession(data);
     if (result === 'wrong-app') toast('That is not a ' + APP.name + ' file');
     else if (result === 'bad-data') toast('That file is missing information this needs');
-    else toast('Progress restored');
+    else { undoReset(); toast('Progress restored'); }
   };
   reader.onerror = () => toast('That file could not be read');
   reader.readAsText(file);
@@ -5831,6 +5907,7 @@ function restartAssessment() {
   STATE.site = null;
   STATE.tab = null;
   STATE.autoAltKey = null;
+  undoReset();
 
   const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse');
   conc.value = 'Lisboa';
@@ -7576,6 +7653,17 @@ function mountApp(site, keepTab) {
     }
     px.className = 'tab cadbtn'; px.hidden = false;
     tl.appendChild(px);
+    let un = document.querySelector('#btnUndo');
+    if (!un) {
+      un = el('button', { class:'tab cadbtn', id:'btnUndo', 'data-t':'btnUndo' });
+      un.title = 'Undo the last change';
+      un.dataset.en = 'Undo';
+      un.innerHTML = (LANG === 'pt' && STATIC_PT['btnUndo'] !== undefined) ? STATIC_PT['btnUndo'] : 'Undo';
+      un.addEventListener('click', undoLast);
+    }
+    un.className = 'tab cadbtn'; un.hidden = false; un.disabled = !UNDO.stack.length;
+    tl.appendChild(un);
+    undoReset();
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
   const wanted = keepTab === 'pavements' ? 'floors' : keepTab === 'climate' ? 'materials' : keepTab;
@@ -7661,6 +7749,7 @@ initSetup();
 /* --- the static markup of the page, keyed by data-t --------------------- */
 Object.assign(STATIC_PT, {
   btnPptx: 'PowerPoint',
+  btnUndo: 'Anular',
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
   setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, abrindo depois um mosaico de materiais — naturais e industrializados, próprios da região — antes de percorrer a envolvente elemento a elemento perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
@@ -8598,6 +8687,12 @@ PT_HINT['sup-dir'] =
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
+});
+/* v2.33.0: Undo button (PT only — not carried to the PL fork). */
+Object.assign(PT, {
+  'Undo the last change': 'Anular a última alteração',
+  'Nothing to undo': 'Nada a anular',
+  'Undone': 'Anulado'
 });
 /* v2.32.0: PowerPoint report export. */
 Object.assign(PT, {
