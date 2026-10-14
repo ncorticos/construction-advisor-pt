@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.38.0',
+  version:     '2.39.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6921,11 +6921,13 @@ function buildMaterials(host) {
     statCard(t('External walls') + ' U ' + t('máx'), fmt(limW, 2), 'W/(m²·°C)', Z.wz),
     statCard(t('Floors') + ' U ' + t('máx'), fmt(limF, 2), 'W/(m²·°C)', Z.wz),
     statCard(t('Windows') + ' Uw,máx', fmt(limG, 2), 'W/(m²·°C)', Z.wz),
+    statCard(t('Summer zone'), Z.sz, null, t('Cooling season, base 25 °C')),
+    statCard('g tot,max', fmt(gtotMax(Z, 'fraca'), 2) + ' / ' + fmt(gtotMax(Z, 'media'), 2), null, Z.sz + ' · ' + t('Weak or heavy inertia')),
     statCard(t('In the library'), '33', null, '11 Natural · 22 Industrial')
-  ], 3));
+  ], 4));
   host.appendChild(hint('mat-zone',
-    'The zone above is still the law: in <b>%1</b> a roof may not exceed <b>%2 W/(m²·°C)</b>, a wall <b>%3 W/(m²·°C)</b>, a floor over outside air <b>%4 W/(m²·°C)</b> — it follows the same horizontal limit as a roof — and a window (dwelling) <b>%5 W/(m²·°C)</b>. Insulation lives in the mosaic below — every other family is mass, and mass alone has never met a winter limit.',
-    [Z.wz, fmt(limR, 2), fmt(limW, 2), fmt(limF, 2), fmt(limG, 2)]));
+    'The zone above is still the law: in <b>%1</b> a roof may not exceed <b>%2 W/(m²·°C)</b>, a wall <b>%3 W/(m²·°C)</b>, a floor over outside air <b>%4 W/(m²·°C)</b> — it follows the same horizontal limit as a roof — and a window (dwelling) <b>%5 W/(m²·°C)</b>. Summer brings its own ceiling in <b>%6</b>: g tot,max is <b>%7</b> for weak inertia and <b>%8</b> for heavy. Insulation lives in the mosaic below — every other family is mass, and mass alone has never met a winter limit.',
+    [Z.wz, fmt(limR, 2), fmt(limW, 2), fmt(limF, 2), fmt(limG, 2), Z.sz, fmt(gtotMax(Z, 'fraca'), 2), fmt(gtotMax(Z, 'media'), 2)]));
 
   host.appendChild(hint('mat-photos',
     'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.'));
@@ -8960,8 +8962,13 @@ Object.assign(PT, {
   'In between: slows heat far more than stone or concrete, insulates far less than a true insulation.': 'No meio: retarda o calor muito mais que a pedra ou o betão, isola muito menos que um verdadeiro isolamento.'
 });
 PT_HINT['mat-zone'] =
-  'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b>, uma parede <b>%3 W/(m²·°C)</b>, um pavimento sobre o exterior <b>%4 W/(m²·°C)</b> — que segue o mesmo limite horizontal da cobertura — e um vão (habitação) <b>%5 W/(m²·°C)</b>. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
+  'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b>, uma parede <b>%3 W/(m²·°C)</b>, um pavimento sobre o exterior <b>%4 W/(m²·°C)</b> — que segue o mesmo limite horizontal da cobertura — e um vão (habitação) <b>%5 W/(m²·°C)</b>. O verão traz o seu próprio teto em <b>%6</b>: g tot,máx é <b>%7</b> para inércia fraca e <b>%8</b> para forte. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
 
+/* v2.39.0: summer dimension on the summary bar. */
+Object.assign(PT, {
+  'Cooling season, base 25 °C': 'Estação de arrefecimento, base 25 °C',
+  'Weak or heavy inertia': 'Inércia fraca ou forte'
+});
 /* v2.2.0: English–Portuguese for photographs and regional availability. */
 Object.assign(PT, {
   'Kind': 'Tipo',
