@@ -137,6 +137,11 @@ input[type=range]{width:120px; accent-color:var(--ink)}
 .chk{display:inline-flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; color:var(--ink2)}
 .chk input{accent-color:var(--ink); margin:0}
 .chk canvas.dev{width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:9px;background:#fff}
+.exportmenu{position:absolute;z-index:90;min-width:280px;max-width:320px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:6px}
+.exportitem{display:block;width:100%;text-align:left;background:none;border:none;border-radius:7px;padding:8px 10px;cursor:pointer;font:inherit;color:var(--ink)}
+.exportitem:hover{background:#eef1f4}
+.exportitem b{display:block;font-size:13px}
+.exportitem span{display:block;font-size:11.5px;color:var(--muted)}
 .seg{display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#fff}
 .seg button{
   font:inherit; font-size:11.5px; padding:4px 10px; border:none; background:#fff;
@@ -616,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.36.0',
+  version:     '2.37.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5565,7 +5570,7 @@ const PPTX = (() => {
   const para = (runs, o) => {
     o = o || {};
     return '<a:p>' + (o.align ? '<a:pPr algn="' + o.align + '"/>' : '') +
-      runs.map(r => run(r.t, r)).join('') + '</a:p>';
+      runs.filter(r => String(r.t) !== '').map(r => run(r.t, r)).join('') + '</a:p>';
   };
   const txBody = (paras, o) => {
     o = o || {};
@@ -5609,10 +5614,9 @@ const PPTX = (() => {
     });
     return out.join('');
   };
-  const bgRect = shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg });
+  const bgRect = () => shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg });
   // ---- package ----
   function pack(slides) {
-    idc = 0;
     const F = {};
     const slideNames = slides.map((_, i) => 'ppt/slides/slide' + (i + 1) + '.xml');
     F['[Content_Types].xml'] =
@@ -5798,6 +5802,43 @@ const PPTX = (() => {
 })();
 
 /* ================= PowerPoint report (selections + verdicts) ================= */
+let exMenu = null;
+function closeExportMenu() {
+  if (!exMenu) return;
+  exMenu.remove();
+  exMenu = null;
+  document.removeEventListener('pointerdown', outsideExportMenu, true);
+  document.removeEventListener('keydown', escExportMenu);
+}
+function outsideExportMenu(ev) {
+  if (exMenu && !exMenu.contains(ev.target) &&
+      !(ev.target.closest && ev.target.closest('#btnExport'))) closeExportMenu();
+}
+function escExportMenu(ev) { if (ev.key === 'Escape') closeExportMenu(); }
+function toggleExportMenu() {
+  if (exMenu) { closeExportMenu(); return; }
+  const b = document.querySelector('#btnExport');
+  const item = (title, desc, fn) => el('button', { class:'exportitem', role:'menuitem',
+    html:'<b>' + title + '</b><span>' + t(desc) + '</span>',
+    onclick: () => { closeExportMenu(); fn(); } });
+  exMenu = el('div', { class:'exportmenu', role:'menu' }, [
+    item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx()),
+    item('Google Slides', 'Download and open Google Slides to import it', () => {
+      exportPptx();
+      window.open('https://slides.google.com', '_blank', 'noopener');
+    }),
+    item('Canva', 'Download and open Canva to import it', () => {
+      exportPptx();
+      window.open('https://www.canva.com/create/presentations/', '_blank', 'noopener');
+    })
+  ]);
+  document.body.appendChild(exMenu);
+  const r = b.getBoundingClientRect();
+  exMenu.style.top = (r.bottom + window.scrollY + 6) + 'px';
+  exMenu.style.left = Math.max(8, r.right + window.scrollX - 300) + 'px';
+  document.addEventListener('pointerdown', outsideExportMenu, true);
+  document.addEventListener('keydown', escExportMenu);
+}
 function exportPptx() {
   if (!STATE.site) { toast(t('Nothing to export yet')); return; }
   try {
@@ -5806,7 +5847,7 @@ function exportPptx() {
     const date = new Date().toLocaleDateString(localeTag());
     const S2 = [];
     const head = (title, sub, pill) => {
-      const o = [R.bgRect,
+      const o = [R.bgRect(),
         R.shape({ x:0.6, y:0.35, w:10.2, h:0.75, paras:[{ runs:[{ t:title, sz:30, b:1 }] }] }),
         R.shape({ x:0.6, y:1.05, w:10.2, h:0.45, paras:[{ runs:[{ t:sub, sz:15, color:C.amber }] }] })];
       if (pill) o.push(R.shape({ x:11.05, y:0.35, w:1.68, h:0.45, fill:C.amber, round:1,
@@ -7911,13 +7952,13 @@ function mountApp(site, keepTab) {
       onclick: () => activate(tab.key) }));
   });
   tl.appendChild(sv);
-    let px = document.querySelector('#btnPptx');
+    let px = document.querySelector('#btnExport');
     if (!px) {
-      px = el('button', { class:'tab cadbtn', id:'btnPptx', 'data-t':'btnPptx' });
-      px.title = 'Export the report as a PowerPoint file';
-      px.dataset.en = 'PowerPoint';
-      px.innerHTML = (LANG === 'pt' && STATIC_PT['btnPptx'] !== undefined) ? STATIC_PT['btnPptx'] : 'PowerPoint';
-      px.addEventListener('click', exportPptx);
+      px = el('button', { class:'tab cadbtn', id:'btnExport', 'data-t':'btnExport' });
+      px.title = 'Export the report';
+      px.dataset.en = 'Export';
+      px.innerHTML = (LANG === 'pt' && STATIC_PT['btnExport'] !== undefined) ? STATIC_PT['btnExport'] : 'Export';
+      px.addEventListener('click', toggleExportMenu);
     }
     px.className = 'tab cadbtn'; px.hidden = false;
     tl.appendChild(px);
@@ -8016,7 +8057,7 @@ initSetup();
 
 /* --- the static markup of the page, keyed by data-t --------------------- */
 Object.assign(STATIC_PT, {
-  btnPptx: 'PowerPoint',
+  btnExport: 'Exportar',
   btnUndo: 'Anular',
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
@@ -8963,6 +9004,13 @@ Object.assign(PT, {
   'Materials selected': 'Materiais escolhidos',
   'Every material chosen in the assemblies, and the budget idea': 'Todos os materiais escolhidos nas soluções, e a ideia de custo',
   'Used in': 'Usado em'
+});
+/* v2.37.0: Export menu + strict-parser hardening of the .pptx. */
+Object.assign(PT, {
+  'Export the report': 'Exportar o relatório',
+  'Download the .pptx file': 'Descarregar o ficheiro .pptx',
+  'Download and open Google Slides to import it': 'Descarregar e abrir o Google Slides para importar',
+  'Download and open Canva to import it': 'Descarregar e abrir o Canva para importar'
 });
 /* v2.36.0: shading-device icons + horizontal bar on the admitted-energy chart. */
 /* v2.35.0: selectable finish colour with regional marks. */
