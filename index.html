@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.37.0',
+  version:     '2.38.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3292,12 +3292,18 @@ function buildRoofs(host) {
   /* --- the surface, and what colour costs -------------------------------- */
   host.appendChild(section('The outside surface', 'Manual SCE Tabela 20 and Equation 4', 'roof-absorptance',
     () => csvRows([['Band','Solar absorptance','Colours']].concat(COLOURS.map(c => [c.name, c.a, c.eg])))));
-  rebuildable(host, (frag, rerender) => {
-    finishPicker(frag, ROOF_STATE, rerender);
-    frag.appendChild(dataTable(['Band', 'α<sub>sol</sub>', 'Colours the manual places here', 'Summer load absorbed'],
-      COLOURS.map(c => ({ cls:c.key === ROOF_STATE.colour ? 'hl' : null,
-        cells:[ t(c.name), fmt(c.a, 1), t(c.eg), fmt(Z.gsolH * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
-  });
+  {
+    const isl = el('div');
+    host.appendChild(isl);
+    const paintIsle = () => {
+      isl.innerHTML = '';
+      finishPicker(isl, ROOF_STATE, paintIsle);
+      isl.appendChild(dataTable(['Band', 'α<sub>sol</sub>', 'Colours the manual places here', 'Summer load absorbed'],
+        COLOURS.map(c => ({ cls:c.key === ROOF_STATE.colour ? 'hl' : null,
+          cells:[ t(c.name), fmt(c.a, 1), t(c.eg), fmt(Z.gsolH * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
+    };
+    paintIsle();
+  }
   host.appendChild(hint('roof-absorptance',
     'The manual allows three bands and no more. On this site the difference between a light roof and a dark one is <b>%1 kWh/m² over the cooling season</b> — absorbed by a surface that is already taking more sun than any façade on the building. Equation 4 then corrects it for the emissivity of the finish: <code>α<sub>sol,cálculo</sub> = α<sub>sol</sub> · F<sub>ε</sub></code>.',
     [fmt(Z.gsolH * (COLOURS[2].a - COLOURS[0].a), 0)]));
@@ -3312,7 +3318,7 @@ function finishPicker(host, ST, rerender) {
   host.appendChild(controls([
     segCtl(t('Finish colour'), COLOURS.map(c => ({ value:c.key,
       label:t(c.name) + ' · α ' + fmt(c.a, 1) })), ST.colour,
-      v => { ST.colour = v; rerender(); })
+      v => { ST.colour = v; checkpoint(); rerender(); })
   ]));
   const got = ALBEDO_RANK[ST.colour], exp = want === null ? null : ALBEDO_RANK[want];
   const mark = exp === null ? null
@@ -3982,15 +3988,21 @@ function buildWallsExt(host) {
   host.appendChild(section('The outside surface', 'Manual SCE Tabela 20', 'wall-absorptance',
     () => csvRows([['Band','α sol','Colours','Absorbed on the worst orientation (kWh/m²)']]
       .concat(COLOURS.map(c => [c.name, c.a, c.eg, Math.round(Z.gsol[worstOri] * c.a)])))));
-  rebuildable(host, (frag, rerender) => {
-    finishPicker(frag, WEXT_STATE, rerender);
-    frag.appendChild(dataTable(
-      ['Band', 'α<sub>sol</sub>', 'Colours',
-       t('Absorbed on') + ' ' + COMPASS8[worstOri], t('Absorbed on') + ' ' + COMPASS8[0]],
-      COLOURS.map(c => ({ cls:c.key === WEXT_STATE.colour ? 'hl' : null,
-        cells:[ t(c.name), fmt(c.a, 1), t(c.eg),
-          fmt(Z.gsol[worstOri] * c.a, 0) + ' kWh/m²', fmt(Z.gsol[0] * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
-  });
+  {
+    const isl = el('div');
+    host.appendChild(isl);
+    const paintIsle = () => {
+      isl.innerHTML = '';
+      finishPicker(isl, WEXT_STATE, paintIsle);
+      isl.appendChild(dataTable(
+        ['Band', 'α<sub>sol</sub>', 'Colours',
+         t('Absorbed on') + ' ' + COMPASS8[worstOri], t('Absorbed on') + ' ' + COMPASS8[0]],
+        COLOURS.map(c => ({ cls:c.key === WEXT_STATE.colour ? 'hl' : null,
+          cells:[ t(c.name), fmt(c.a, 1), t(c.eg),
+            fmt(Z.gsol[worstOri] * c.a, 0) + ' kWh/m²', fmt(Z.gsol[0] * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
+    };
+    paintIsle();
+  }
 }
 
 /* ----------------------------------------------------- INTERNAL WALLS -- */
@@ -9005,6 +9017,7 @@ Object.assign(PT, {
   'Every material chosen in the assemblies, and the budget idea': 'Todos os materiais escolhidos nas soluções, e a ideia de custo',
   'Used in': 'Usado em'
 });
+/* v2.38.0: fix v2.35.0 page wipe — finish islands render into their own div. */
 /* v2.37.0: Export menu + strict-parser hardening of the .pptx. */
 Object.assign(PT, {
   'Export the report': 'Exportar o relatório',
