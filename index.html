@@ -179,6 +179,7 @@ table.data tr.total td{border-top:1px solid var(--line); font-weight:600; color:
 .pill.ok{background:#eaf3dd; color:#3f6212}
 .pill.empty{background:#f1f2ef; color:#7b838b}
 .pill.bad{background:#fbe6e6; color:#9f2420}
+.pill.warn{background:#fdf0dc; color:#92610f}
 table.inv td:nth-child(2){text-align:left}
 table.inv td:last-child{text-align:left; font-family:var(--sans); color:var(--muted); white-space:normal; min-width:280px}
 
@@ -614,7 +615,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.34.0',
+  version:     '2.35.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1642,6 +1643,22 @@ const RAR = {
  * gives three bands only, and names the colours that fall in each; the same
  * three bands are used by Tabela 48 to pick the column of a shading device.
  */
+/** Finish colour the site asks for: the sunny south and the islands want
+ *  white, the centre takes medium, the north can carry dark. Keyed by NUTS III
+ *  as the app knows it (STATE.site.nuts); Grande Lisboa and Setúbal sit with
+ *  the south, as they already do in the suppliers' regions. */
+const ALBEDO_SOUTH = ['Alentejo Central', 'Alentejo Litoral', 'Algarve', 'Alto Alentejo',
+  'Baixo Alentejo', 'Grande Lisboa', 'Lezíria do Tejo', 'Península de Setúbal'];
+const ALBEDO_NORTH = ['Alto Trás-os-Montes', 'Ave', 'Cávado', 'Douro', 'Entre Douro e Vouga',
+  'Grande Porto', 'Minho-Lima', 'Tâmega'];
+function albedoExpected(nuts, region) {
+  if (region === 'madeira' || region === 'acores') return 'clara';
+  if (!nuts) return null;
+  if (ALBEDO_SOUTH.indexOf(nuts) >= 0) return 'clara';
+  if (ALBEDO_NORTH.indexOf(nuts) >= 0) return 'escura';
+  return 'media';
+}
+const ALBEDO_RANK = { clara:0, media:1, escura:2 };
 const COLOURS = [
   { key:'clara',  a:0.4, name:'Light',  eg:'White, cream, yellow, orange, light red' },
   { key:'media',  a:0.5, name:'Medium', eg:'Dark red, light green, light blue, light grey' },
@@ -3269,13 +3286,40 @@ function buildRoofs(host) {
   /* --- the surface, and what colour costs -------------------------------- */
   host.appendChild(section('The outside surface', 'Manual SCE Tabela 20 and Equation 4', 'roof-absorptance',
     () => csvRows([['Band','Solar absorptance','Colours']].concat(COLOURS.map(c => [c.name, c.a, c.eg])))));
-  host.appendChild(dataTable(['Band', 'α<sub>sol</sub>', 'Colours the manual places here', 'Summer load absorbed'],
-    COLOURS.map(c => [ t(c.name), fmt(c.a, 1), t(c.eg), fmt(Z.gsolH * c.a, 0) + ' kWh/m²' ]), [0, 2]));
+  rebuildable(host, (frag, rerender) => {
+    finishPicker(frag, ROOF_STATE, rerender);
+    frag.appendChild(dataTable(['Band', 'α<sub>sol</sub>', 'Colours the manual places here', 'Summer load absorbed'],
+      COLOURS.map(c => ({ cls:c.key === ROOF_STATE.colour ? 'hl' : null,
+        cells:[ t(c.name), fmt(c.a, 1), t(c.eg), fmt(Z.gsolH * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
+  });
   host.appendChild(hint('roof-absorptance',
     'The manual allows three bands and no more. On this site the difference between a light roof and a dark one is <b>%1 kWh/m² over the cooling season</b> — absorbed by a surface that is already taking more sun than any façade on the building. Equation 4 then corrects it for the emissivity of the finish: <code>α<sub>sol,cálculo</sub> = α<sub>sol</sub> · F<sub>ε</sub></code>.',
     [fmt(Z.gsolH * (COLOURS[2].a - COLOURS[0].a), 0)]));
 }
 
+/** Finish-colour picker with the regional mark: green when the choice is
+ *  the region's band, amber one band off, red the opposite end. ST is the
+ *  element state holding .colour ('clara' | 'media' | 'escura'). */
+function finishPicker(host, ST, rerender) {
+  const site = STATE.site || {};
+  const want = albedoExpected(site.nuts, STATE.zone && STATE.zone.region);
+  host.appendChild(controls([
+    segCtl(t('Finish colour'), COLOURS.map(c => ({ value:c.key,
+      label:t(c.name) + ' · α ' + fmt(c.a, 1) })), ST.colour,
+      v => { ST.colour = v; rerender(); })
+  ]));
+  const got = ALBEDO_RANK[ST.colour], exp = want === null ? null : ALBEDO_RANK[want];
+  const mark = exp === null ? null
+    : got === exp ? ['ok', 'Right for this region']
+    : Math.abs(got - exp) === 1 ? ['warn', 'One band off for this region']
+    : ['bad', 'Wrong for this region'];
+  const wname = k => t(COLOURS.find(c => c.key === k).name);
+  host.appendChild(el('div', { class:'limitrow' }, [
+    el('span', { html:t('Finish colour') + ': <b>' + wname(ST.colour) + '</b>' +
+      (want === null ? '' : ' · ' + t('this region wants') + ' <b>' + wname(want) + '</b>') }),
+    mark ? el('span', { html:'<span class="pill ' + mark[0] + '">' + t(mark[1]) + '</span>' }) : null
+  ]));
+}
 /* ---------------------------------------------------------- PAVEMENTS --
    A floor that is not on the ground: over an open undercroft, over a garage,
    over a store or a stairwell. Heat leaves it downwards, which changes the
@@ -3932,11 +3976,15 @@ function buildWallsExt(host) {
   host.appendChild(section('The outside surface', 'Manual SCE Tabela 20', 'wall-absorptance',
     () => csvRows([['Band','α sol','Colours','Absorbed on the worst orientation (kWh/m²)']]
       .concat(COLOURS.map(c => [c.name, c.a, c.eg, Math.round(Z.gsol[worstOri] * c.a)])))));
-  host.appendChild(dataTable(
-    ['Band', 'α<sub>sol</sub>', 'Colours',
-     t('Absorbed on') + ' ' + COMPASS8[worstOri], t('Absorbed on') + ' ' + COMPASS8[0]],
-    COLOURS.map(c => [ t(c.name), fmt(c.a, 1), t(c.eg),
-      fmt(Z.gsol[worstOri] * c.a, 0) + ' kWh/m²', fmt(Z.gsol[0] * c.a, 0) + ' kWh/m²' ]), [0, 2]));
+  rebuildable(host, (frag, rerender) => {
+    finishPicker(frag, WEXT_STATE, rerender);
+    frag.appendChild(dataTable(
+      ['Band', 'α<sub>sol</sub>', 'Colours',
+       t('Absorbed on') + ' ' + COMPASS8[worstOri], t('Absorbed on') + ' ' + COMPASS8[0]],
+      COLOURS.map(c => ({ cls:c.key === WEXT_STATE.colour ? 'hl' : null,
+        cells:[ t(c.name), fmt(c.a, 1), t(c.eg),
+          fmt(Z.gsol[worstOri] * c.a, 0) + ' kWh/m²', fmt(Z.gsol[0] * c.a, 0) + ' kWh/m²' ] })), [0, 2]));
+  });
 }
 
 /* ----------------------------------------------------- INTERNAL WALLS -- */
@@ -5669,6 +5717,14 @@ function exportPptx() {
       { t:t('Layer, from outside inwards'), b:1 }, { t:t('Thickness'), b:1 },
       { t:'R', b:1 }, { t:t('Mass'), b:1 }
     ];
+    const finishLine = (ST, y) => {
+      const want = albedoExpected(STATE.site && STATE.site.nuts, Z.region);
+      const got = ALBEDO_RANK[ST.colour], exp = want === null ? null : ALBEDO_RANK[want];
+      const mark = exp === null ? '' : got === exp ? t('Right for this region')
+        : Math.abs(got - exp) === 1 ? t('One band off for this region') : t('Wrong for this region');
+      return R.shape({ x:0.6, y, w:12.13, h:0.45, paras:[{ runs:[{ t:t('Finish colour') + ': ' +
+        t(COLOURS.find(c => c.key === ST.colour).name) + (want === null ? '' : ' — ' + mark), sz:12 }] }] });
+    };
     const uline = (A, lim, w) => {
       const v = verdict(A.U, lim);
       return R.shape({ x:0.6, y:w, w:7.6, h:0.5, paras:[{ runs:[
@@ -5743,7 +5799,8 @@ function exportPptx() {
         R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
-        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25)
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
+        finishLine(ROOF_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55)
       ]));
     }
     // ---- 4. floors ----
@@ -5774,7 +5831,8 @@ function exportPptx() {
         R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
-        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25)
+        uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
+        finishLine(WEXT_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55)
       ]));
     }
     // ---- 6. internal walls ----
@@ -8788,6 +8846,14 @@ Object.assign(PT, {
   'Materials selected': 'Materiais escolhidos',
   'Every material chosen in the assemblies, and the budget idea': 'Todos os materiais escolhidos nas soluções, e a ideia de custo',
   'Used in': 'Usado em'
+});
+/* v2.35.0: selectable finish colour with regional marks. */
+Object.assign(PT, {
+  'Finish colour': 'Cor do acabamento',
+  'this region wants': 'esta região quer',
+  'Right for this region': 'Certa para esta região',
+  'One band off for this region': 'Uma banda ao lado para esta região',
+  'Wrong for this region': 'Errada para esta região'
 });
 /* v2.33.0: Undo button (PT only — not carried to the PL fork). */
 Object.assign(PT, {
