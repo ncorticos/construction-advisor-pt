@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.41.0',
+  version:     '2.42.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1225,7 +1225,7 @@ function rangeCtl(labelText, min, max, step, value, onchange, fmtFn) {
 const SOURCE_LINKS = [
   ['Manual SCE', 'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf'],
   ['Portaria',   'https://files.diariodarepublica.pt/1s/2021/07/12602/0001200053.pdf'],
-  ['EN ISO 13788', 'https://www.iso.org/standard/51615.html']
+  ['EN ISO 13788', 'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf']
 ];
 function sourceLinkFor(note) {
   if (!note) return null;
@@ -4397,7 +4397,7 @@ function buildIAQ(host) {
       host.appendChild(dataTable(
         ['Route', 'Requirement'],
         [
-          [t('Fixed opening'), fmt(IAQ_MINOR_GLAZING.area, 0) + ' cm² ' + t('free area, EN 16798-1')],
+          [t('Fixed opening'), fmt(IAQ_MINOR_GLAZING.area, 0) + ' cm² ' + t('free area, Portaria §1.2.1(b)')],
           [t('Self-regulating grille'), fmt(IAQ_MINOR_GLAZING.flowLo, 0) + ' m³/h ' + t('at') + ' ' + fmt(IAQ_MINOR_GLAZING.presLo, 0)
             + ' Pa, ' + fmt(IAQ_MINOR_GLAZING.flowHi, 0) + ' m³/h ' + t('at') + ' ' + fmt(IAQ_MINOR_GLAZING.presHi, 0) + ' Pa, NP 13141-1']
         ], [0]));
@@ -4784,7 +4784,7 @@ function buildIAQ(host) {
       'A<sub>pav</sub> is the floor area of the installation itself, in m². A private installation — one used by a single person at a time — is held to a lower floor than a public one, whose extraction scales with the number of fixtures it carries. Corridors, changing rooms, stores, kitchens and technical spaces are exempt from the occupancy and building criteria above, but not from this one.'));
 
     /* --- heat recovery, where a mechanical system carries it --------------- */
-    frag.appendChild(section('Heat-recovery efficiency', 'Manual SCE Tabela 67, EN 16798-5-1', 'iaq-recovery',
+    frag.appendChild(section('Heat-recovery efficiency', 'Manual SCE Tabela 67 (NP EN 16798-5-1)', 'iaq-recovery',
       () => csvRows([['Exchanger', 'η t']].concat(IAQ_HEAT_RECOVERY.map(h => [h.name, h.eta])))));
     frag.appendChild(dataTable(['Exchanger', 'η<sub>t</sub>'],
       IAQ_HEAT_RECOVERY.map(h => [t(h.name), fmt(h.eta, 2)]), [0]));
@@ -4850,16 +4850,16 @@ const GLOSS = [
    'O fator solar do vão envidraçado com os dispositivos de protecção solar totalmente activados — o vidro e o seu sombreamento tomados em conjunto.'],
   ['TL ÷ g', 'The selectivity index: light transmission divided by solar factor. It measures how much daylight a pane admits for each unit of solar heat, and is the figure to maximise on a plane that overheats.',
    'O índice de seletividade: a transmissão luminosa a dividir pelo fator solar. Mede quanta luz natural um vidro admite por cada unidade de calor solar, e é o valor a maximizar num plano que sobreaquece.'],
-  ['TL', 'Transmissão Luminosa — light transmission: the percentage of visible light that passes straight through the glass, determined to EN 410.',
-   'Transmissão luminosa: a percentagem de luz visível transmitida directamente através do vidro, determinada segundo a Norma EN 410.'],
+  ['TL', 'Transmissão Luminosa — light transmission: the percentage of visible light that passes straight through the glass, determined to NP EN 410.',
+   'Transmissão luminosa: a percentagem de luz visível transmitida directamente através do vidro, determinada segundo a Norma Portuguesa NP EN 410.'],
   ['RLe', 'Reflexão Luminosa Exterior — the percentage of visible light reflected by the outer surface of the glass. High values make a mirrored façade.',
    'Reflexão luminosa exterior: a percentagem de luz visível reflectida pela superfície exterior do vidro. Valores altos dão uma fachada espelhada.'],
   ['RLi', 'Reflexão Luminosa Interior — the percentage of visible light reflected by the inner surface of the glass. High values make the glass mirror the room at night.',
    'Reflexão luminosa interior: a percentagem de luz visível reflectida pela superfície interior do vidro. Valores altos fazem o vidro espelhar o compartimento à noite.'],
   ['IS', 'Índice de Seletividade — the selectivity index, TL ÷ g: daylight admitted per unit of solar heat.',
    'Índice de seletividade, TL ÷ g: luz natural admitida por unidade de calor solar.'],
-  ['EN 410', 'The European standard for determining the luminous and solar characteristics of glazing.',
-   'A norma europeia para a determinação das características luminosas e solares dos envidraçados.'],
+  ['EN 410', 'The Portuguese norm NP EN 410 (IPQ) for determining the luminous and solar characteristics of glazing.',
+   'A norma portuguesa NP EN 410 (IPQ) para a determinação das características luminosas e solares dos envidraçados.'],
   ['Fo', 'The shading factor of opaque horizontal elements above a glazed opening — overhangs, balconies, other parts of the building.',
    'O factor de sombreamento de elementos opacos horizontais sobrejacentes ao vão envidraçado — palas, varandas, outros corpos do edifício.'],
   ['Ff', 'The shading factor of opaque vertical elements beside a glazed opening — fins, other parts of the building.',
@@ -4934,8 +4934,8 @@ const GLOSS = [
    'O coeficiente de transmissão térmica médio dia-noite de um vão: a média entre o vão com e sem o dispositivo de protecção activado, meio dia em cada situação.'],
   ['ΔR', 'The additional thermal resistance an activated shading device contributes, Manual SCE Tabela 45. A shutter with insulated slats is worth 0,19 (m²·°C)/W.',
    'A resistência térmica adicional devida a um dispositivo de protecção activado, Manual SCE, Tabela 45. Uma persiana de réguas com isolante vale 0,19 (m²·°C)/W.'],
-  ['g⊥,vi', 'The solar factor of the glazing at normal incidence, determined to EN 410.',
-   'O fator solar do vidro para incidência perpendicular, determinado segundo a Norma EN 410.'],
+  ['g⊥,vi', 'The solar factor of the glazing at normal incidence, determined to NP EN 410.',
+   'O fator solar do vidro para incidência perpendicular, determinado segundo a Norma Portuguesa NP EN 410.'],
   ['gtot,vc', 'The solar factor tabulated in Manual SCE Tabela 48 for an ordinary glass with a given device fully activated. It is rescaled onto the actual glass by Equations 19 and 20.',
    'O fator solar tabelado na Tabela 48 do Manual SCE para um vidro corrente com um dado dispositivo totalmente activado. É reconvertido para o vidro real pelas Equações 19 e 20.'],
   ['αsol', 'Absortância solar — the fraction of incident solar radiation absorbed by an opaque surface. Manual SCE Tabela 20 allows three bands only: 0,4 light, 0,5 medium, 0,8 dark.',
@@ -7935,18 +7935,18 @@ const REFS = [
   ['Brophy, V., &amp; Lewis, J. O. (2011). <i>A Green Vitruvius: Principles and practice of sustainable architectural design</i> (2nd ed.). Earthscan.',
    'Glazing strategy and the reading of an envelope as a whole.',
    'https://www.routledge.com/A-Green-Vitruvius-Principles-and-Practice-of-Sustainable-Architectural-Design/Brophy-Lewis/p/book/9781849711913'],
-  ['European Committee for Standardization. (2011). <i>Glass in building — Determination of luminous and solar characteristics of glazing</i> (EN 410:2011).',
-   'The definition of light transmission and solar factor that the glazing table reports.',
-   'https://knowledge.bsigroup.com/products/glass-in-building-determination-of-luminous-and-solar-characteristics-of-glazing'],
-  ['European Committee for Standardization. (2012). <i>Hygrothermal performance of building components and building elements — Internal surface temperature to avoid critical surface humidity and interstitial condensation — Calculation methods</i> (EN ISO 13788:2012).',
-   'The Glaser method drawn on the external-wall page: the steady-state comparison of the vapour-pressure profile against saturation, and the saturation-pressure expressions of its Annex E. A screening method by its own account, run here on generic vapour-resistance factors rather than declared product data.',
-   'https://www.iso.org/standard/51615.html'],
-  ['International Organization for Standardization. (2014). <i>Thermal insulation — Building elements — In-situ measurement of thermal resistance and thermal transmittance</i> — Part 1: Heat flow meter method (ISO 9869-1:2014).',
+  ['Instituto Português da Qualidade (IPQ). <i>Glass in building — Determination of luminous and solar characteristics of glazing</i> (NP EN 410, Portuguese adoption of EN 410:2011).',
+   'The definition of light transmission and solar factor that the glazing table reports, applied to the values of Manual SCE Tabela 44.',
+   'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf'],
+  ['Instituto Português da Qualidade (IPQ). <i>Hygrothermal performance of building components and building elements — Internal surface temperature to avoid critical surface humidity and interstitial condensation — Calculation methods</i> (NP EN ISO 13788, Portuguese adoption of EN ISO 13788:2012).',
+   'The Glaser method drawn on the external-wall page: the steady-state comparison of the vapour-pressure profile against saturation, and the saturation-pressure expressions of its Annex E. A screening method by its own account, run here on generic vapour-resistance factors rather than declared product data. Verification prescribed by the Manual SCE.',
+   'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf'],
+  ['Instituto Português da Qualidade (IPQ). <i>Thermal insulation — Building elements — In-situ measurement of thermal resistance and thermal transmittance</i> — Part 1: Heat flow meter method (NP ISO 9869-1, Portuguese adoption of ISO 9869-1:2014).',
    'In-situ measurement, which the Manual SCE admits as evidence of an existing build-up.',
-   'https://www.iso.org/standard/59697.html'],
-  ['European Committee for Standardization. (2019). <i>Energy performance of buildings — Ventilation for buildings — Part 1: Indoor environmental input parameters for design and assessment of energy performance of buildings addressing indoor air quality, thermal environment, lighting and acoustics</i> (EN 16798-1:2019).',
-   'Minimum hourly air-change rate for dwellings; the compliance route for a facade opening added on a minor glazing renewal.',
-   'https://epb.center/document/en-16798-1/'],
+   'https://www.sce.pt/wp-content/uploads/2021/07/Manual-SCE.pdf'],
+  ['Instituto Português da Qualidade (IPQ). <i>Energy performance of buildings — Ventilation for buildings — Part 1: Indoor environmental input parameters</i> (NP EN 16798-1, Portuguese adoption of EN 16798-1:2019).',
+   'Cited by Portaria n.º 138-I/2021, §1.2.1(b) for the compliance route of a facade opening added on a minor glazing renewal; the enforced minimum hourly air-change rate for dwellings is Portaria Tabela 10.',
+   'https://files.diariodarepublica.pt/1s/2021/07/12602/0001200053.pdf'],
   ['Direção-Geral do Território / Ministério da Coesão Territorial. <i>Altitude mínima</i> and <i>Altitude máxima</i>, by município (2025), published via PORDATA, Fundação Francisco Manuel dos Santos.',
    'Not an SCE quantity — carried only as a plausibility check on the site altitude a student enters, against the lowest and highest ground the municipality itself actually reaches.', 'https://www.pordata.pt/municipios']
 ];
