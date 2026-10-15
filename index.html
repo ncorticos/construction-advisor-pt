@@ -626,7 +626,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.46.0',
+  version:     '2.47.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5931,11 +5931,11 @@ function toggleExportMenu() {
     onclick: () => { closeExportMenu(); fn(); } });
   exMenu = el('div', { class:'exportmenu', role:'menu' }, [
     item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx('pptx')),
-    item('Google Slides (.pptx)', 'Download and open Google Slides to import it', () => {
+    item('Google Slides', 'Saves a .pptx, then opens Slides to convert it into a native deck', () => {
       exportPptx('pptx');
       window.open('https://slides.google.com', '_blank', 'noopener');
     }),
-    item('Canva (.pptx)', 'Download and open Canva to import it', () => {
+    item('Canva', 'Saves a .pptx, then opens Canva to convert it into a native design', () => {
       exportPptx('pptx');
       window.open('https://www.canva.com/create/presentations/', '_blank', 'noopener');
     }),
@@ -9634,9 +9634,10 @@ Object.assign(PT, {
 Object.assign(PT, {
   'Export the report': 'Exportar o relatório',
   'Download the .pptx file': 'Descarregar o ficheiro .pptx',
-  'Download and open Google Slides to import it': 'Descarregar e abrir o Google Slides para importar',
-  'Download and open Canva to import it': 'Descarregar e abrir o Canva para importar'
+  'Saves a .pptx, then opens Slides to convert it into a native deck': 'Guarda um .pptx e abre o Slides para o converter numa apresentação nativa',
+  'Saves a .pptx, then opens Canva to convert it into a native design': 'Guarda um .pptx e abre o Canva para o converter num design nativo'
 });
+/* v2.47.0: export menu names the native outcome (Slides deck, Canva design) instead of the .pptx payload. */
 /* v2.36.0: shading-device icons + horizontal bar on the admitted-energy chart. */
 /* v2.35.0: selectable finish colour with regional marks. */
 Object.assign(PT, {
