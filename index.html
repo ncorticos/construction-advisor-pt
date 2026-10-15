@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.43.0',
+  version:     '2.44.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1927,6 +1927,14 @@ const DELTA_R = [
  * collector and such a summer liability.
  */
 const XJ = { N:0.27, NE:0.33, E:0.56, SE:0.84, S:1.00, SW:0.84, W:0.56, NW:0.33, H:0.89 };
+/* v2.44.0: angular-selectivity corrections on admitted solar energy. Manual
+   SCE Eq. 25 sets the winter solar factor to gi = 0.90 × g⊥,vi without
+   permanent devices; Tabela 50 sets the summer correction Fw,v per
+   orientation (double-glazing row — the whole library is double glazing;
+   horizontal takes the 0.90 footnote value). Admitted energy per m² of glass
+   is therefore Gsul·Xj·M·0.90·g in heating and Gsol·Fw,v·g in cooling. */
+const FWI = 0.90;
+const FWV = { N:0.80, NE:0.85, E:0.85, SE:0.85, S:0.75, SW:0.85, W:0.85, NW:0.85, H:0.90 };
 /* ----------------------------------------------------------- GLAZING --
    Thirty-six insulating glass units, described only by what they do: the
    thermal transmittance of the glass alone, the light they transmit, the
@@ -4249,17 +4257,17 @@ function buildWindows(host) {
       [fmt(GLAZ_PLAIN.tl / (100 * GLAZ_PLAIN.g), 2)]));
 
     /* --- gain by orientation ---------------------------------------------- */
-    const win = ORI8.map(o => Z.gsul * XJ[o] * Z.M * G.g);
-    const sum = ORI8.map((o, i) => Z.gsol[i] * G.g);
+    const win = ORI8.map(o => Z.gsul * XJ[o] * Z.M * FWI * G.g);
+    const sum = ORI8.map((o, i) => Z.gsol[i] * FWV[o] * G.g);
     const ORI9 = ORI8.concat(['H']);
-    const win9 = win.concat([Z.gsul * XJ.H * Z.M * G.g]);
-    const sum9 = sum.concat([Z.gsolH * G.g]);
+    const win9 = win.concat([Z.gsul * XJ.H * Z.M * FWI * G.g]);
+    const sum9 = sum.concat([Z.gsolH * FWV.H * G.g]);
     frag.appendChild(section('What one square metre of this glass admits', 'Per square metre of glazing, per season',
       'win-orientation', () => csvRows([['Orientation','Heating season (kWh/m²)','Cooling season (kWh/m²)']]
         .concat(ORI9.map((o, i) => [o, win9[i].toFixed(0), sum9[i].toFixed(0)])))));
     makePanel(frag, {
       title: 'Admitted solar energy by orientation',
-      note: 'The tabulated energy on each face, multiplied by the solar factor of the chosen glass',
+      note: 'The tabulated energy on each face, through the solar factor of the chosen glass, corrected for angular selectivity',
       aspect: 2.4,
       render(ctx, W, H) {
         const mx = Math.max.apply(null, win9.concat(sum9));
@@ -4303,8 +4311,8 @@ function buildWindows(host) {
       checkCtl(t('Impact safety is a concern'), S.impact, v => { S.impact = v; rerender(); })
     ]));
     const oi = clamp(S.ori, 0, 7);
-    const heat1 = Z.gsul * XJ[ORI8[oi]] * Z.M;
-    const cool1 = Z.gsol[oi];
+    const heat1 = Z.gsul * XJ[ORI8[oi]] * Z.M * FWI;
+    const cool1 = Z.gsol[oi] * FWV[ORI8[oi]];
     const loadRatio = heat1 > 0 ? cool1 / heat1 : Infinity;
     const bySelect = loadRatio >= 1;
     const best = GLAZING.map((p, i) => ({ p, i, is:glazIS(p) }))
@@ -9064,8 +9072,8 @@ Object.assign(PT, {
   "What one square metre of this glass admits": "O que um metro quadrado deste vidro deixa entrar",
   "Per square metre of glazing, per season": "Por metro quadrado de envidraçado, por estação",
   "Admitted solar energy by orientation": "Energia solar admitida por orientação",
-  "The tabulated energy on each face, multiplied by the solar factor of the chosen glass":
-    "A energia tabelada em cada fachada, multiplicada pelo fator solar do vidro escolhido",
+  "The tabulated energy on each face, through the solar factor of the chosen glass, corrected for angular selectivity":
+    "A energia tabelada em cada fachada, através do fator solar do vidro escolhido, com correção de seletividade angular",
   "Heating season — this is the gain you want": "Estação de aquecimento — este é o ganho que se quer",
   "Cooling season — this is the gain you must shade": "Estação de arrefecimento — este é o ganho que é preciso sombrear",
 
