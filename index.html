@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.40.0',
+  version:     '2.41.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5599,12 +5599,10 @@ const PPTX = (() => {
       '<a:ext cx="' + X(o.w) + '" cy="' + X(o.h) + '"/></a:xfrm>' +
       '<a:prstGeom prst="' + (o.round ? 'roundRect' : 'rect') + '"><a:avLst/></a:prstGeom>' +
       (o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>') +
-      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '"><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
+      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
               : '<a:ln><a:noFill/></a:ln>') +
       '</p:spPr>' + txBody(o.paras || [], o) + '</p:sp>';
   };
-  /* Tables are grids of plain text boxes, not DrawingML tables: every
-     renderer draws those, while table-style resolution varies. */
   const table = (o) => {
     const out = [];
     let y = o.y;
@@ -5834,15 +5832,16 @@ function toggleExportMenu() {
     html:'<b>' + title + '</b><span>' + t(desc) + '</span>',
     onclick: () => { closeExportMenu(); fn(); } });
   exMenu = el('div', { class:'exportmenu', role:'menu' }, [
-    item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx()),
+    item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx('pptx')),
     item('Google Slides (.pptx)', 'Download and open Google Slides to import it', () => {
-      exportPptx();
+      exportPptx('pptx');
       window.open('https://slides.google.com', '_blank', 'noopener');
     }),
     item('Canva (.pptx)', 'Download and open Canva to import it', () => {
-      exportPptx();
+      exportPptx('pptx');
       window.open('https://www.canva.com/create/presentations/', '_blank', 'noopener');
-    })
+    }),
+    item('LibreOffice (.odp)', 'Download the .odp file', () => exportPptx('odp'))
   ]);
   document.body.appendChild(exMenu);
   const r = b.getBoundingClientRect();
@@ -5851,22 +5850,265 @@ function toggleExportMenu() {
   document.addEventListener('pointerdown', outsideExportMenu, true);
   document.addEventListener('keydown', escExportMenu);
 }
-function exportPptx() {
+/* ==================== ODP engine (v2.41.0): native OpenDocument output ====================
+   Same shape/table call pattern as the PPTX engine above, so the report code
+   below runs unchanged against either writer. Positioning in inches in,
+   centimetres on the wire. Styling follows what LibreOffice itself writes:
+   fills and strokes live in named graphic styles (note the svg: namespace on
+   stroke attributes), text in named paragraph/text styles — no inline fo:.
+   Tables are grids of boxes, exactly like the .pptx ones. */
+const ODP = (() => {
+  const C = { bg:'1B2730', panel:'243B46', line:'3A4F59', amber:'E8A33D', teal:'7FB3A3',
+              white:'FFFFFF', muted:'9AA7B0', box:'3A4034', green:'8FCB8F', red:'D98C8C' };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const cm = v => (v * 2.54).toFixed(3) + 'cm';
+  const NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ' +
+    'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" ' +
+    'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" ' +
+    'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" ' +
+    'xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" ' +
+    'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"';
+  const NSMETA = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" ' +
+    'xmlns:dc="http://purl.org/dc/elements/1.1/"';
+  let nuid = 0;
+  const gstyles = {};
+  const gstyle = (fill, stroke, strokew) => {
+    const k = (fill || '-') + '|' + (stroke || '-') + '|' + (strokew || 0);
+    if (!gstyles[k]) {
+      const nm = 'gr' + Object.keys(gstyles).length;
+      gstyles[k] = '<style:style style:name="' + nm + '" style:family="graphic" ' +
+        'style:parent-style-name="standard">' +
+        '<style:graphic-properties draw:fill="' + (fill ? 'solid' : 'none') + '"' +
+        (fill ? ' draw:fill-color="#' + fill + '"' : '') +
+        ' draw:stroke="' + (stroke ? 'solid' : 'none') + '"' +
+        (stroke ? ' svg:stroke-color="#' + stroke + '" svg:stroke-width="' + strokew + 'pt"' : '') +
+        '/></style:style>';
+    }
+    return 'gr' + Object.keys(gstyles).indexOf(k);
+  };
+  const pstyles = {};
+  const pstyle = (align) => {
+    const k = 'p|' + (align || 'l');
+    if (!pstyles[k]) {
+      const nm = 'P' + Object.keys(pstyles).length;
+      const al = align === 'r' ? 'end' : align === 'ctr' ? 'center' : 'start';
+      pstyles[k] = '<style:style style:name="' + nm + '" style:family="paragraph">' +
+        '<style:paragraph-properties fo:margin-left="0cm" fo:margin-right="0cm" ' +
+        'fo:margin-top="0cm" fo:margin-bottom="0cm" fo:text-align="' + al + '"/>' +
+        '</style:style>';
+    }
+    return 'P' + Object.keys(pstyles).indexOf(k);
+  };
+  const tstyles = {};
+  const tstyle = (o) => {
+    const k = 't|' + (o.sz || 12) + '|' + (o.color || C.white) + '|' + (o.b ? 'b' : '') + (o.i ? 'i' : '');
+    if (!tstyles[k]) {
+      const nm = 'T' + Object.keys(tstyles).length;
+      tstyles[k] = '<style:style style:name="' + nm + '" style:family="text">' +
+        '<style:text-properties fo:font-family="Calibri" fo:font-size="' + (o.sz || 12) + 'pt" ' +
+        'fo:color="#' + (o.color || C.white) + '"' +
+        (o.b ? ' fo:font-weight="bold"' : '') + (o.i ? ' fo:font-style="italic"' : '') +
+        '/></style:style>';
+    }
+    return 'T' + Object.keys(tstyles).indexOf(k);
+  };
+  const run = (t, o) => '<text:span text:style-name="' + tstyle(o) + '">' + esc(t) + '</text:span>';
+  const para = (runs, o) => {
+    o = o || {};
+    return '<text:p text:style-name="' + pstyle(o.align) + '">' +
+      runs.filter(r => String(r.t) !== '').map(r => run(r.t, r)).join('') + '</text:p>';
+  };
+  const txbox = (o) => {
+    const pad = (o.padT !== undefined ? o.padT * 2.54 : 0.15).toFixed(2);
+    return '<draw:text-box fo:padding-left="0.23cm" fo:padding-right="0.18cm" ' +
+      'fo:padding-top="' + pad + 'cm" fo:padding-bottom="0.15cm" fo:min-height="' + cm(o.h) + '">' +
+      (o.paras || []).map(p => para(p.runs, p)).join('') + '</draw:text-box>';
+  };
+  const shape = (o) => {
+    const id = ++nuid;
+    const gs = gstyle(o.fill || null, o.line ? (o.lineColor || o.fill) : null,
+      o.line ? ((o.lnW || 19050) / 12700).toFixed(2) : 0);
+    // draw:text-style-name gives the shape a default paragraph context (as LO writes it)
+    if (!pstyles['p|l']) pstyle('l');
+    return '<draw:custom-shape draw:style-name="' + gs + '" draw:text-style-name="P0" ' +
+      'draw:name="s' + id + '" draw:layer="layout" svg:x="' + cm(o.x) +
+      '" svg:y="' + cm(o.y) + '" svg:width="' + cm(o.w) + '" svg:height="' + cm(o.h) + '">' +
+      (o.paras || []).map(pp => para(pp.runs, pp)).join('') +
+      '<draw:enhanced-geometry draw:mirror-horizontal="false" draw:mirror-vertical="false" ' +
+      'draw:glue-points="?f0 0 0 ?f1 ?f0 ?f2 ?f3 ?f1" draw:text-areas="0 0 ?f3 ?f2" ' +
+      'svg:viewBox="0 0 0 0" draw:type="ooxml-rect" ' +
+      'draw:enhanced-path="M 0 0 L ?f3 0 ?f3 ?f2 0 ?f2 Z N">' +
+      '<draw:equation draw:name="f0" draw:formula="logwidth/2"/>' +
+      '<draw:equation draw:name="f1" draw:formula="logheight/2"/>' +
+      '<draw:equation draw:name="f2" draw:formula="logheight"/>' +
+      '<draw:equation draw:name="f3" draw:formula="logwidth"/>' +
+      '</draw:enhanced-geometry></draw:custom-shape>';
+  };
+  const table = (o) => {
+    const out = [];
+    let y = o.y;
+    o.rows.forEach((row, ri) => {
+      let x = o.x;
+      const rh = o.rowH || 0.34;
+      const idx = (o.r0 || 0) + ri;
+      row.forEach((cell, ci) => {
+        const w = o.colW[ci];
+        const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
+        out.push(shape({ x, y, w, h:rh,
+          fill:idx === 0 ? C.panel : (idx % 2 ? '22313B' : C.bg),
+          line:1, lineColor:C.line, lnW:6350,
+          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || idx === 0,
+            color:cell.color || (idx === 0 ? C.amber : C.white) }], align:al }] }));
+        x += w;
+      });
+      y += rh;
+    });
+    return out.join('');
+  };
+  const bgRect = () => shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg,
+    paras:[{ runs:[{ t:' ', sz:10 }] }] });
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = bytes => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const enc = new TextEncoder();
+  function pack(slides) {
+    const F = {};
+    const autost = ['<style:page-layout style:name="PM0">' +
+      '<style:page-layout-properties fo:page-width="33.867cm" fo:page-height="19.05cm"/>' +
+      '</style:page-layout>'];
+    F['mimetype'] = 'application/vnd.oasis.opendocument.presentation';
+    F['META-INF/manifest.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
+      '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.presentation"/>' +
+      '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+      '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
+      '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>' +
+      '</manifest:manifest>';
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    F['meta.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-meta ' + NSMETA + ' office:version="1.2">' +
+      '<office:meta><meta:generator>Construction Advisor</meta:generator>' +
+      '<dc:title>Construction Advisor — envelope report</dc:title>' +
+      '<dc:creator>Nuno Dinis Cortiços</dc:creator><dc:date>' + now + '</dc:date>' +
+      '</office:meta></office:document-meta>';
+    F['styles.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-styles ' + NS + ' office:version="1.2">' +
+      '<office:styles>' +
+      '<style:style style:name="dp1" style:family="drawing-page">' +
+      '<style:drawing-page-properties draw:fill="none"/></style:style>' +
+      '</office:styles><office:automatic-styles>' + autost.join('') + '</office:automatic-styles>' +
+      '<office:master-styles>' +
+      '<draw:layer-set><draw:layer draw:name="layout"/><draw:layer draw:name="background"/><draw:layer draw:name="backgroundobjects"/></draw:layer-set>' +
+      '<draw:master-page draw:name="Default" style:page-layout-name="PM0" draw:style-name="dp1"/>' +
+      '</office:master-styles></office:document-styles>';
+    F['content.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-content ' + NS + ' office:version="1.2">' +
+      '<office:scripts/><office:font-face-decls>' +
+      '<style:font-face style:name="Calibri" svg:font-family="Calibri"/>' +
+      '</office:font-face-decls><office:automatic-styles>' +
+      Object.keys(gstyles).map(k => gstyles[k]).join('') +
+      Object.keys(pstyles).map(k => pstyles[k]).join('') +
+      Object.keys(tstyles).map(k => tstyles[k]).join('') +
+      '</office:automatic-styles><office:body><office:presentation>' +
+      slides.map((shapes, i) =>
+        '<draw:page draw:name="page' + (i + 1) + '" draw:style-name="dp1" ' +
+        'draw:master-page-name="Default" presentation:page-layout-name="PM0">' +
+        shapes.join('') + '</draw:page>').join('') +
+      '</office:presentation></office:body></office:document-content>';
+    const names = Object.keys(F);
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    names.forEach(nm => {
+      const data = enc.encode(F[nm]);
+      const crc = crc32(data);
+      const nl = enc.encode(nm);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true);
+      lh.setUint16(10, 0x21, true);
+      lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true);
+      lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nl.length, true);
+      lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), nl, data);
+      central.push({ nm:nl, crc, len:data.length, offset });
+      offset += 30 + nl.length + data.length;
+    });
+    const csize = central.reduce((a, c) => a + 46 + c.nm.length, 0);
+    const cstart = offset;
+    central.forEach(c => {
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint16(12, 0x21, true);
+      ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, c.crc, true);
+      ch.setUint32(20, c.len, true);
+      ch.setUint32(24, c.len, true);
+      ch.setUint16(28, c.nm.length, true);
+      ch.setUint16(30, 0, true);
+      ch.setUint16(32, 0, true);
+      ch.setUint16(34, 0, true);
+      ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true);
+      ch.setUint32(42, c.offset, true);
+      chunks.push(new Uint8Array(ch.buffer), c.nm);
+    });
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, names.length, true);
+    end.setUint16(10, names.length, true);
+    end.setUint32(12, csize, true);
+    end.setUint32(16, cstart, true);
+    chunks.push(new Uint8Array(end.buffer));
+    return new Blob(chunks, { type:'application/vnd.oasis.opendocument.presentation' });
+  }
+  return { build:pack, C, shape, table, bgRect, esc };
+})();
+
+
+function exportPptx(format) {
   if (!STATE.site) { toast(t('Nothing to export yet')); return; }
   try {
     const Z = STATE.zone, S = STATE.site;
-    const R = PPTX, C = R.C;
+    const R = format === 'odp' ? ODP : PPTX, C = R.C;
     const date = new Date().toLocaleDateString(localeTag());
     const S2 = [];
     const head = (title, sub, pill) => {
       const o = [R.bgRect(),
         R.shape({ x:0.6, y:0.35, w:10.2, h:0.75, paras:[{ runs:[{ t:title, sz:30, b:1 }] }] }),
         R.shape({ x:0.6, y:1.05, w:10.2, h:0.45, paras:[{ runs:[{ t:sub, sz:15, color:C.amber }] }] })];
-      if (pill) o.push(R.shape({ x:11.05, y:0.35, w:1.68, h:0.45, fill:C.amber, round:1,
+      if (pill) o.push(R.shape({ x:11.05, y:0.35, w:1.68, h:0.45, fill:C.amber, round:1, padT:0.06,
         paras:[{ runs:[{ t:pill, sz:13, b:1, color:'1B2730' }] }], anchor:'ctr' }));
       return o;
     };
-    const metric = (x, y, w, big, cap) => R.shape({ x, y, w, h:1.55, fill:C.box, line:1, lineColor:C.amber,
+    const metric = (x, y, w, big, cap) => R.shape({ x, y, w, h:1.55, fill:C.box, line:1, lineColor:C.amber, padT:0.32,
       paras:[{ runs:[{ t:big, sz:40, b:1, color:C.amber }] }, { runs:[{ t:cap, sz:12 }] }], anchor:'ctr' });
     const verdict = (v, lim) => {
       const ok = v !== null && v !== undefined && v <= lim + 1e-9;
@@ -6141,7 +6383,7 @@ function exportPptx() {
       R.shape({ x:0.6, y:2.0, w:12.13, h:0.6, paras:[{ runs:[{ t:
         t('Generated by') + ' ' + APP.name + ' · Nuno Dinis Cortiços · ' + date, sz:14 }] }] })
     ]));
-    download(PPTX.build(S2), slugify(sitePrefix() + 'report') + '.pptx');
+    download(R.build(S2), slugify(sitePrefix() + 'report') + (format === 'odp' ? '.odp' : '.pptx'));
     toast(t('Report exported'));
   } catch (e) { toast('Export failed: ' + e.message); }
 }
@@ -8988,6 +9230,10 @@ Object.assign(PT, {
 PT_HINT['mat-zone'] =
   'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b>, uma parede <b>%3 W/(m²·°C)</b>, um pavimento sobre o exterior <b>%4 W/(m²·°C)</b> — que segue o mesmo limite horizontal da cobertura — e um vão (habitação) <b>%5 W/(m²·°C)</b>. O verão traz o seu próprio teto em <b>%6</b>: g tot,máx é <b>%7</b> para inércia fraca e <b>%8</b> para forte. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
 
+/* v2.41.0: native .odp output for LibreOffice. */
+Object.assign(PT, {
+  'Download the .odp file': 'Descarregar o ficheiro .odp'
+});
 /* v2.40.0: menu extensions on all items, layer strips in the report. */
 /* v2.39.0: summer dimension on the summary bar. */
 Object.assign(PT, {
