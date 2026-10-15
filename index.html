@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.42.0',
+  version:     '2.43.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5236,6 +5236,7 @@ function buildShading(host) {
   pageHead(host, 'Solar protections',
     'Some openings need help against the summer sun: blinds, shutters, awnings and curtains overlapping the glazing, each with a solar factor the regulation tabulates. Tick the devices fitted on the opening — the law counts them from outside inwards and stops at the first opaque one — and read what the combination lets through against the ceiling the summer zone allows.');
   rebuildable(host, (frag, rerender) => {
+    if (AA_STATE.present) buildAaSolarRef(frag);
     const S = SHD2_STATE;
     const G = GLAZING[clamp(S.glaz, 0, GLAZING.length - 1)];
     const ref = S.dbl ? 0.75 : 0.85;
@@ -5511,9 +5512,21 @@ function buildShading(host) {
     }
   });
 }
+/* v2.43.0: handoff from Architecture Advisor PT (same-origin continuation).
+   That app packs its measured envelope into this app's own session shape —
+   site, FLR_STATE/BUDGET_STATE areas and a meta.envelope with the per-facade
+   splits whose rotation is already resolved to true compass points — writes it
+   to localStorage key 'arca-handoff-construction' and opens this app. Areas
+   land through the normal merge below; the per-orientation splits land in
+   AA_STATE for display. Nothing the other app cannot know (layers, prices,
+   glazing spec) is ever overwritten: those keys simply keep their defaults. */
+const AA_HANDOFF_KEY = 'arca-handoff-construction';
+const AA_ORDER = ['N','NE','E','SE','S','SW','W','NW'];
+const AA_STATE = { present:false, savedAt:null, fromApp:null, fromVer:null,
+  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[] };
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
-  FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE
+  FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE, AA_STATE
 };
 
 /* A pristine copy of every state object, taken once at load, before a
@@ -6409,7 +6422,132 @@ function reflectSiteOnSetupForm(site) {
     b.setAttribute('aria-pressed', b.dataset.op === (site.operation || 'new') ? 'true' : 'false'));
 }
 
-/** 'ok', 'wrong-app' or 'bad-data' — never throws, so a hand-edited or
+/** Reads the handoff envelope (meta.envelope) into AA_STATE, aggregating the
+ *  four plan facades by the true compass point each already carries — the
+ *  sender resolved rotation before packing, so this is the solar-orientation
+ *  adjustment, not a new computation. Returns true when a handoff was found. */
+function aaApplyMeta(data) {
+  const m = data && data.meta;
+  if (!m || !m.handoff || m.handoff.kind !== 'architecture-advisor-handoff' || !m.envelope) return false;
+  const env = m.envelope, fac = {};
+  ['S','N','E','W'].forEach(f => {
+    const e = (env.perFacade || {})[f];
+    if (!e || AA_ORDER.indexOf(e.compass) < 0) return;
+    const b = fac[e.compass] || (fac[e.compass] = { faces:[], wall:0, glass:0, doors:0, gel:0 });
+    if (b.faces.indexOf(f) < 0) b.faces.push(f);
+    b.wall += +e.wall || 0; b.glass += +e.glass || 0; b.doors += +e.doors || 0; b.gel += +e.gel || 0;
+  });
+  const r2 = v => Math.round((+v || 0) * 100) / 100;
+  Object.keys(fac).forEach(c => { const b = fac[c];
+    b.wall = r2(b.wall); b.glass = r2(b.glass); b.doors = r2(b.doors); b.gel = r2(b.gel); });
+  AA_STATE.present = true;
+  AA_STATE.savedAt = data.savedAt || null;
+  AA_STATE.fromApp = (m.handoff.from && m.handoff.from.app) || 'Architecture Advisor PT';
+  AA_STATE.fromVer = (m.handoff.from && m.handoff.from.version) || null;
+  AA_STATE.building = m.building || null;
+  AA_STATE.facades = fac;
+  AA_STATE.clerestory = env.clerestory || null;
+  AA_STATE.roofWindows = env.roofWindows || null;
+  AA_STATE.roof = env.roof || null;
+  AA_STATE.floor = env.floor || null;
+  const bs = (data.state && data.state.BUDGET_STATE) || {};
+  AA_STATE.budgetKeys = ['roof','ground','wext','win'].filter(k => bs[k] &&
+    bs[k].area !== null && bs[k].area !== undefined && bs[k].area !== '');
+  return true;
+}
+/** A student typing their own area over an imported one removes the
+ *  provenance tag (the quantity stays — it is still a number they own). */
+function aaUnmark(key) {
+  const i = AA_STATE.budgetKeys.indexOf(key);
+  if (i >= 0) AA_STATE.budgetKeys.splice(i, 1);
+}
+function aaClear() {
+  AA_STATE.present = false; AA_STATE.savedAt = null; AA_STATE.fromApp = null; AA_STATE.fromVer = null;
+  AA_STATE.building = null; AA_STATE.facades = {}; AA_STATE.clerestory = null;
+  AA_STATE.roofWindows = null; AA_STATE.roof = null; AA_STATE.floor = null; AA_STATE.budgetKeys = [];
+}
+function aaTotals() {
+  const o = { wall:0, glass:0, doors:0, gel:0 };
+  Object.keys(AA_STATE.facades).forEach(c => { const b = AA_STATE.facades[c];
+    o.wall += b.wall; o.glass += b.glass; o.doors += b.doors; o.gel += b.gel; });
+  return o;
+}
+/** The imported study as the student decided it: building, per-orientation
+ *  envelope and other measured areas, on top of the Materials tab. */
+function buildAaCard(host) {
+  const E = AA_STATE, B = E.building || {};
+  const when = E.savedAt ? new Date(E.savedAt).toLocaleDateString() : '';
+  const card = el('div', { id:'aaCard' });
+  const T = aaTotals();
+  const csvOf = () => csvRows(
+    [['Orientation','Facades','Gross wall (m2)','Glass (m2)','Doors (m2)','Vent brick (m2)','Opaque net (m2)']]
+    .concat(AA_ORDER.filter(c => E.facades[c]).map(c => { const b = E.facades[c];
+      return [c, b.faces.join(' + '), b.wall, b.glass, b.doors, b.gel,
+        Math.round((b.wall - b.glass - b.doors - b.gel) * 100) / 100]; }))
+    .concat([['Total', '', Math.round(T.wall * 100) / 100, Math.round(T.glass * 100) / 100,
+      Math.round(T.doors * 100) / 100, Math.round(T.gel * 100) / 100,
+      Math.round((T.wall - T.glass - T.doors - T.gel) * 100) / 100]]));
+  card.appendChild(section('From the Architecture Advisor',
+    t('Measured envelope, as decided there — areas follow true solar orientation') +
+    (E.fromApp ? ' · ' + E.fromApp + (E.fromVer ? ' ' + E.fromVer : '') : '') + (when ? ' · ' + when : ''),
+    'aa-handoff', csvOf));
+  const st = [];
+  if (B.stories) st.push(statCard(t('Storeys'), String(B.stories), null, null));
+  if (B.length && B.depth) st.push(statCard(t('Footprint'), fmt(B.length, 1) + ' × ' + fmt(B.depth, 1), 'm', null));
+  if (B.form) st.push(statCard(t('Form'), B.form + (B.rotation ? ' · ' + fmt(B.rotation, 0) + '°' : ''), null, null));
+  if (E.roof && E.roof.type) st.push(statCard(t('Roof'), E.roof.type, null, null));
+  if (st.length) card.appendChild(stats(st, 4));
+  const rows = AA_ORDER.filter(c => E.facades[c]).map(c => {
+    const b = E.facades[c];
+    return [COMPASS8[AA_ORDER.indexOf(c)], b.faces.join(' + '), fmt(b.wall, 1),
+      fmt(b.glass, 1), fmt(b.doors, 1), fmt(b.gel, 1),
+      fmt(b.wall - b.glass - b.doors - b.gel, 1)];
+  });
+  rows.push({ cls:'total', cells:[t('Total'), '',
+    fmt(T.wall, 1), fmt(T.glass, 1), fmt(T.doors, 1), fmt(T.gel, 1),
+    fmt(T.wall - T.glass - T.doors - T.gel, 1)] });
+  card.appendChild(dataTable(
+    [t('Orientation'), t('Façades'), t('Gross wall (m²)'), t('Glass (m²)'),
+     t('Doors (m²)'), t('Vent brick (m²)'), t('Opaque net (m²)')], rows, [0, 1]));
+  const o2 = [];
+  if (E.clerestory && E.clerestory.glass) o2.push([t('Clerestory glass'), fmt(E.clerestory.glass, 1) + ' m²']);
+  if (E.clerestory && E.clerestory.wall) o2.push([t('Clerestory wall'), fmt(E.clerestory.wall, 1) + ' m²']);
+  if (E.roofWindows && E.roofWindows.area) o2.push([t('Roof windows'), fmt(E.roofWindows.area, 1) + ' m²']);
+  if (E.roof && E.roof.slopeArea) o2.push([t('Roof slope area'), fmt(E.roof.slopeArea, 1) + ' m²']);
+  if (E.floor && E.floor.footprintArea) o2.push([t('Floor footprint'), fmt(E.floor.footprintArea, 1) + ' m²']);
+  if (E.floor && E.floor.perimeter) o2.push([t('Floor perimeter'), fmt(E.floor.perimeter, 1) + ' m']);
+  if (B.sunspace) o2.push([t('Sunspace'), B.sunspace.face + ' · ' + fmt(B.sunspace.depth, 1) + ' m']);
+  if (o2.length) card.appendChild(dataTable([t('Other measured areas'), t('Value')], o2, [0]));
+  card.appendChild(hint('aa-note',
+    'U-values, layer build-ups, interior assemblies, prices and the glazing specification stay manual here — the other app does not decide them. The cost panels already carry its measured areas; the unit prices are still yours to read from the price bank.'));
+  const hide = el('button', { class:'btn', text:t('Hide this summary'),
+    onclick: () => { aaClear(); card.remove(); } });
+  hide.style.marginTop = '8px';
+  card.appendChild(hide);
+  host.appendChild(card);
+}
+/** Glazing per true orientation, for scale, at the top of Solar protections:
+ *  devices are still chosen per opening — this only shows where the glass is. */
+function buildAaSolarRef(frag) {
+  const E = AA_STATE, T = aaTotals();
+  const gl = T.glass + T.doors;
+  if (!(gl > 0)) return;
+  const rows = AA_ORDER.filter(c => E.facades[c]).map(c => {
+    const b = E.facades[c], g = b.glass + b.doors;
+    if (!(g > 0)) return null;
+    return [COMPASS8[AA_ORDER.indexOf(c)], fmt(g, 1) + ' m²', fmt(100 * g / gl, 0) + ' %'];
+  }).filter(r => r);
+  rows.push({ cls:'total', cells:[t('Total'), fmt(gl, 1) + ' m²', '100 %'] });
+  frag.appendChild(section('Glazing by solar orientation',
+    'Glass + doors measured in the Architecture Advisor, per true orientation',
+    'aa-glazing', () => csvRows([['Orientation','Glass + doors (m2)','Share (%)']]
+      .concat(AA_ORDER.filter(c => E.facades[c]).map(c => { const b = E.facades[c];
+        return [c, Math.round((b.glass + b.doors) * 100) / 100,
+          Math.round(100 * (b.glass + b.doors) / gl)]; })))));
+  frag.appendChild(dataTable([t('Orientation'), t('Glass + doors'), t('Share')], rows, [0]));
+}
+
+/** 'ok', 'ok-aa', 'wrong-app' or 'bad-data' — never throws, so a hand-edited or
  *  unrelated JSON file gives a clear toast instead of a blank page. */
 function applySession(data) {
   if (!data || typeof data !== 'object' || (data.app !== APP.name && data.app !== 'Construction Advisor')) return 'wrong-app';
@@ -6417,9 +6555,18 @@ function applySession(data) {
   resetAllState();
   for (const k in STATE_REGISTRY)
     if (data.state[k] && typeof data.state[k] === 'object') Object.assign(STATE_REGISTRY[k], data.state[k]);
+  /* A handoff carries bare { area } budget objects (no price key yet) — the
+     merge above replaces the { area, price } pair wholesale, so rebuild it
+     before any total reads a missing key. */
+  BUDGET_ORDER.forEach(k => {
+    const s = BUDGET_STATE[k] || {};
+    BUDGET_STATE[k] = { area: (s.area === undefined || s.area === '' ? null : s.area),
+                        price: (s.price === undefined || s.price === '' ? null : s.price) };
+  });
+  const aa = aaApplyMeta(data);
   reflectSiteOnSetupForm(data.site);
   mountApp(data.site, data.tab);
-  return 'ok';
+  return aa ? 'ok-aa' : 'ok';
 }
 
 function loadSessionFile(file) {
@@ -6431,7 +6578,7 @@ function loadSessionFile(file) {
     const result = applySession(data);
     if (result === 'wrong-app') toast('That is not a ' + APP.name + ' file');
     else if (result === 'bad-data') toast('That file is missing information this needs');
-    else { undoReset(); toast('Progress restored'); }
+    else { undoReset(); toast(t(result === 'ok-aa' ? 'Study imported from Architecture Advisor' : 'Progress restored')); }
   };
   reader.onerror = () => toast('That file could not be read');
   reader.readAsText(file);
@@ -6622,7 +6769,12 @@ function costPanel(host, cfg) {
       wrap.appendChild(inp);
       return wrap;
     };
-    grid.appendChild(mkNum(t('Element area'), S.area, t('m² — e.g. 120'), v => { S.area = v; }));
+    const areaWrap = mkNum(t('Element area'), S.area, t('m² — e.g. 120'),
+      v => { S.area = v; aaUnmark(cfg.key); });
+    if (AA_STATE.present && AA_STATE.budgetKeys.indexOf(cfg.key) >= 0)
+      areaWrap.appendChild(el('div', { class:'sub',
+        text:t('Area measured in the Architecture Advisor — overwrite as needed') }));
+    grid.appendChild(areaWrap);
     grid.appendChild(mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; }));
     grid.appendChild(el('div', null, [
       el('label', { text:' ' }),
@@ -7180,6 +7332,7 @@ function buildMaterials(host) {
   const Z = STATE.zone;
   pageHead(host, 'Materials',
     'Availability before solutions: what the area builds with, natural and industrial, before any of it is asked to meet a limit.');
+  if (AA_STATE.present) buildAaCard(host);
   const limR = umax(Z, 'roof'), limW = umax(Z, 'wall'), limF = umax(Z, 'roof'), limG = umax(Z, 'glaz');
   host.appendChild(stats([
     statCard('Winter zone', Z.wz, null, t('Heating season, base 18 °C')),
@@ -8319,6 +8472,38 @@ initSetup();
   if (!saved && /^pt\b/i.test(navigator.language || '')) saved = 'pt';
   setLanguage(saved || 'en');
 })();
+/* The Architecture Advisor writes its handoff to localStorage under the key
+   above and opens this app right after (same origin, so the key is shared).
+   Pick it up on a fresh boot — no site mounted yet, so nothing is discarded —
+   and consume the key so a reload does not re-import over later work.
+   Anything older than thirty days is dropped as stale. The downloaded
+   -construction-handoff.json file remains the persistent route, through the
+   setup screen's own "Continue a saved assessment" button. */
+(function aaBootPickup() {
+  /* Deferred past parsing on purpose: the European Portuguese dictionaries
+     are filled at the foot of this script (see the v2.0.0 note down there),
+     so content built during the parse would bake in English fallbacks. */
+  window.addEventListener('DOMContentLoaded', () => {
+    if (STATE.site) return;
+  let raw = null;
+  try { raw = localStorage.getItem(AA_HANDOFF_KEY); } catch (e) { return; }
+  if (!raw) return;
+  let o = null;
+  try { o = JSON.parse(raw); } catch (e) { return; }
+  if (!o || o.kind !== 'architecture-advisor-handoff' || !o.payload) return;
+  const age = o.savedAt ? (Date.now() - new Date(o.savedAt).getTime()) : Infinity;
+  if (!(age >= 0) || age > 30 * 24 * 3600 * 1000) {
+    try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
+    return;
+  }
+  const r = applySession(o.payload);
+  if (r === 'ok-aa') {
+    try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
+    undoReset();
+    toast(t('Study imported from Architecture Advisor'));
+  }
+  });
+})();
 
 /* ==================================== 8. EUROPEAN PORTUGUESE ==
    One entry per string, resolved. Keys are the exact English, with numbers
@@ -9234,6 +9419,40 @@ PT_HINT['mat-zone'] =
 Object.assign(PT, {
   'Download the .odp file': 'Descarregar o ficheiro .odp'
 });
+/* v2.43.0: handoff from Architecture Advisor PT. */
+Object.assign(PT, {
+  'Study imported from Architecture Advisor': 'Estudo importado do Architecture Advisor',
+  'From the Architecture Advisor': 'Do Architecture Advisor',
+  'Measured envelope, as decided there — areas follow true solar orientation': 'Envolvente medida, tal como decidida nessa aplicação — as áreas seguem a orientação solar verdadeira',
+  'Storeys': 'Pisos',
+  'Footprint': 'Implantação',
+  'Form': 'Forma',
+  'Roof': 'Cobertura',
+  'Orientation': 'Orientação',
+  'Façades': 'Fachadas',
+  'Gross wall (m²)': 'Parede bruta (m²)',
+  'Glass (m²)': 'Vidro (m²)',
+  'Doors (m²)': 'Portas (m²)',
+  'Vent brick (m²)': 'Tijolo de ventilação (m²)',
+  'Opaque net (m²)': 'Opaco líquido (m²)',
+  'Other measured areas': 'Outras áreas medidas',
+  'Value': 'Valor',
+  'Clerestory glass': 'Vidro da claraboia',
+  'Clerestory wall': 'Parede da claraboia',
+  'Roof windows': 'Janelas de cobertura',
+  'Roof slope area': 'Área inclinada da cobertura',
+  'Floor footprint': 'Área de implantação do pavimento',
+  'Floor perimeter': 'Perímetro do pavimento',
+  'Sunspace': 'Estufa adossada',
+  'Hide this summary': 'Ocultar este resumo',
+  'Area measured in the Architecture Advisor — overwrite as needed': 'Área medida no Architecture Advisor — corrija se necessário',
+  'Glazing by solar orientation': 'Envidraçados por orientação solar',
+  'Glass + doors measured in the Architecture Advisor, per true orientation': 'Vidro + portas medidos no Architecture Advisor, por orientação verdadeira',
+  'Glass + doors': 'Vidro + portas',
+  'Share': 'Quota'
+});
+PT_HINT['aa-note'] =
+  'Os valores de U, as constituições, os interiores, os preços e o vidro continuam a decidir-se aqui — a outra aplicação não decide nada disso. Os painéis de custo já trazem as áreas medidas nessa aplicação; os preços unitários continuam a ser lidos por si no banco de preços.';
 /* v2.40.0: menu extensions on all items, layer strips in the report. */
 /* v2.39.0: summer dimension on the summary bar. */
 Object.assign(PT, {
