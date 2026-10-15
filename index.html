@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.39.0',
+  version:     '2.40.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5835,11 +5835,11 @@ function toggleExportMenu() {
     onclick: () => { closeExportMenu(); fn(); } });
   exMenu = el('div', { class:'exportmenu', role:'menu' }, [
     item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx()),
-    item('Google Slides', 'Download and open Google Slides to import it', () => {
+    item('Google Slides (.pptx)', 'Download and open Google Slides to import it', () => {
       exportPptx();
       window.open('https://slides.google.com', '_blank', 'noopener');
     }),
-    item('Canva', 'Download and open Canva to import it', () => {
+    item('Canva (.pptx)', 'Download and open Canva to import it', () => {
       exportPptx();
       window.open('https://www.canva.com/create/presentations/', '_blank', 'noopener');
     })
@@ -5885,6 +5885,25 @@ function exportPptx() {
       { t:t('Layer, from outside inwards'), b:1 }, { t:t('Thickness'), b:1 },
       { t:'R', b:1 }, { t:t('Mass'), b:1 }
     ];
+    const strip = (layers, y) => {
+      const th = layers.map(layerThickness);
+      const tot = th.reduce((a, b) => a + b, 0) || 1;
+      const W = 12.13, x0 = 0.6;
+      const raw = th.map(d => Math.max(tot * 0.02, d));
+      const sc = W / raw.reduce((a, b) => a + b, 0);
+      let x = x0;
+      const out = layers.map((L, li) => {
+        const w = raw[li] * sc;
+        const s = R.shape({ x, y, w, h:0.5, fill:materialColor(L).replace('#', ''),
+          line:1, lineColor:'FFFFFF', lnW:6350,
+          paras:[{ runs:[{ t:' ', sz:10 }] }], anchor:'ctr' });
+        x += w;
+        return s;
+      });
+      out.push(R.shape({ x:0.6, y:y + 0.55, w:12.13, h:0.25, paras:[{ runs:[
+        { t:t('Outside') + ' → ' + t('Inside'), sz:10, color:C.muted }] }] }));
+      return out;
+    };
     const finishLine = (ST, y) => {
       const want = albedoExpected(STATE.site && STATE.site.nuts, Z.region);
       const got = ALBEDO_RANK[ST.colour], exp = want === null ? null : ALBEDO_RANK[want];
@@ -5968,7 +5987,8 @@ function exportPptx() {
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
-        finishLine(ROOF_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55)
+        finishLine(ROOF_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55),
+        ...strip(ROOF_STATE.layers, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 1.15)
       ]));
     }
     // ---- 4. floors ----
@@ -5987,8 +6007,10 @@ function exportPptx() {
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.5, 1.9, 3.23, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.3 + 0.2),
-        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.3 + 0.85, w:12.13, h:0.45, paras:[{ runs:[
-          { t:gnm + ' — B′ = ' + fmt(Bb, 1) + ' m  ·  Ubf = ' + fmt(Ub, 2) + ' W/(m²·°C)', sz:12 }] }] })
+        ...strip(PAV_STATE.layers, 1.9 + (A.parts.length + 1) * 0.3 + 0.85),
+        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.3 + 1.5, w:12.13, h:0.45, paras:[{ runs:[
+          { t:gnm + ' — B′ = ' + fmt(Bb, 1) + ' m  ·  Ubf = ' + fmt(Ub, 2) + ' W/(m²·°C)', sz:12 }] }] }),
+        ...strip(FLR_STATE.layers, 1.9 + (A.parts.length + 1) * 0.3 + 2.1)
       ]));
     }
     // ---- 5. external walls ----
@@ -6000,7 +6022,8 @@ function exportPptx() {
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
-        finishLine(WEXT_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55)
+        finishLine(WEXT_STATE, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 0.55),
+        ...strip(WEXT_STATE.layers, 1.9 + (A.parts.length + 1) * 0.34 + 0.25 + 1.15)
       ]));
     }
     // ---- 6. internal walls ----
@@ -6022,7 +6045,8 @@ function exportPptx() {
         R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.32 + 0.85, w:12.13, h:0.5, paras:[{ runs:[
           { t:'Msi = ' + fmt(UM.msi, 0) + ' / ' + t('cap') + ' ' + cap +
             (UM.msi > cap ? ' — ' + t('Excess discarded') + ' ' + fmt(UM.msi - cap, 0) : ' — ' + t('Everything counts')) +
-            '  ·  It = ' + fmt(itW, 0) + ' (' + t(inertiaOf(itW).name) + ')', sz:12 }] }] })
+            '  ·  It = ' + fmt(itW, 0) + ' (' + t(inertiaOf(itW).name) + ')', sz:12 }] }] }),
+        ...strip(W.layers, 1.9 + (A.parts.length + 1) * 0.32 + 1.5)
       ]));
     }
     // ---- 7. windows ----
@@ -8964,6 +8988,7 @@ Object.assign(PT, {
 PT_HINT['mat-zone'] =
   'A zona acima continua a ser lei: em <b>%1</b> uma cobertura não pode exceder <b>%2 W/(m²·°C)</b>, uma parede <b>%3 W/(m²·°C)</b>, um pavimento sobre o exterior <b>%4 W/(m²·°C)</b> — que segue o mesmo limite horizontal da cobertura — e um vão (habitação) <b>%5 W/(m²·°C)</b>. O verão traz o seu próprio teto em <b>%6</b>: g tot,máx é <b>%7</b> para inércia fraca e <b>%8</b> para forte. O isolamento mora no mosaico abaixo — todas as outras famílias são massa, e só a massa nunca cumpriu um limite de Inverno.';
 
+/* v2.40.0: menu extensions on all items, layer strips in the report. */
 /* v2.39.0: summer dimension on the summary bar. */
 Object.assign(PT, {
   'Cooling season, base 25 °C': 'Estação de arrefecimento, base 25 °C',
