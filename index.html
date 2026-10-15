@@ -502,6 +502,11 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
           <span class="sub" id="altSub" data-t="fldAltSub">Metres above sea level, at the building, not at the town hall.</span>
         </div>
         <div class="fld">
+          <label for="inpLat" data-t="fldLat">Latitude of the site</label>
+          <input type="number" id="inpLat" min="36" max="44" step="0.1" value="38.7">
+          <span class="sub" data-t="fldLatSub">Decimal degrees north, for the sun-hours chart — Lisboa 38.7, Porto 41.1, Faro 37.0. An imported study carries its own.</span>
+        </div>
+        <div class="fld">
           <label for="selUse" data-t="fldUse">Building use</label>
           <select id="selUse">
             <option value="hab" data-t="useHab">Dwelling</option>
@@ -621,7 +626,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.45.0',
+  version:     '2.46.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -864,6 +869,35 @@ function sunriseSunset(doy, lat, lon, tz) {
   const H = Math.acos(cosH) * DEG;              // degrees
   const noon = 12 - (4 * lon - 60 * tz + eqt) / 60;
   return { rise: noon - H / 15, set: noon + H / 15, noon };
+}
+/* v2.46.0: direct-sun hours per facade, ported from Architecture Advisor PT
+   (same NOAA/Spencer sun, same ±90° facade rule, same half-year split).
+   Only the site latitude matters — with tz = lon/15 the longitude terms
+   cancel out of solar time exactly, so this takes lat alone in spirit but
+   keeps the (lat, lon) signature of the original. */
+const DOY_MON = (() => { const a = []; MDAYS.forEach((n, m) => { for (let d = 0; d < n; d++) a.push(m); }); return a; })();
+function facadeSun(lat, lon) {
+  const tz = lon / 15, monthly = [];
+  for (let m = 0; m < 12; m++) monthly.push([0,0,0,0,0,0,0,0]);
+  for (let doy = 1; doy <= 365; doy++) {
+    const mo = DOY_MON[doy - 1];
+    for (let h = 0; h < 24; h += 0.5) {
+      const sp = sunPos(doy, h, lat, lon, tz);
+      if (sp.alt <= 0) continue;
+      for (let f = 0; f < 8; f++) {
+        let d = (sp.azi - f * 45) % 360;
+        if (d > 180) d -= 360; if (d < -180) d += 360;
+        if (Math.abs(d) < 90) monthly[mo][f] += 0.5;
+      }
+    }
+  }
+  const sumIdx = [3,4,5,6,7,8];
+  const winter = [0,0,0,0,0,0,0,0], summer = [0,0,0,0,0,0,0,0], annual = [0,0,0,0,0,0,0,0];
+  monthly.forEach((row, m) => row.forEach((v, f) => {
+    annual[f] += v;
+    (sumIdx.indexOf(m) >= 0 ? summer : winter)[f] += v;
+  }));
+  return { monthly, winter, summer, annual };
 }
 
 /* ------------------------------------------------------- 5. CHART ENGINE -- */
@@ -4293,6 +4327,40 @@ function buildWindows(host) {
       'With a solar factor of %1, a square metre facing south admits <b>%2 kWh</b> over the heating season and <b>%3 kWh</b> over the cooling season; the same square metre facing west admits <b>%4</b> and <b>%5</b>, and facing north <b>%6</b> and <b>%7</b>. West earns little and costs most — low sun that fixed shading serves worst — which is the argument the next page makes with numbers.',
       [fmt(G.g, 2), fmt(win[4], 0), fmt(sum[4], 0), fmt(win[6], 0), fmt(sum[6], 0), fmt(win[0], 0), fmt(sum[0], 0)]));
 
+    /* --- direct-sun hours, ported from Architecture Advisor PT --------------
+       The same geometric reference as over there — unobstructed vertical
+       facades over the whole year, split by half-year — computed at this
+       site's own latitude. Kept next to the regulation admitted energy above
+       so the two quantities read together: hours are solar geometry, kWh are
+       the manual's tables through the chosen glass. */
+    const sunLat = (STATE.site && isFinite(+STATE.site.lat)) ? +STATE.site.lat : 38.7;
+    const sunLatKnown = !!(STATE.site && isFinite(+STATE.site.lat));
+    const FS = facadeSun(sunLat, -9.0);
+    makePanel(frag, {
+      title: 'Direct-sun hours on each facade',
+      note: t('Unobstructed vertical facades over the whole year, split by half-year') +
+        ' · ' + (sunLatKnown ? fmt(sunLat, 1) + ' °N' : t('reference latitude 38.7° N')),
+      aspect: 1.9,
+      render(ctx, W, H) {
+        const yMaxB = niceDomain(0, Math.max.apply(null, FS.annual) * 1.02, 5, 0)[1];
+        const P = plotRect(48, 12, W - 48 - 10, H - 12 - 44, -0.6, 7.6, 0, yMaxB);
+        drawAxes(ctx, P, { xTicks:[0,1,2,3,4,5,6,7], xFmt:i => COMPASS8[i], yLabel:t('Hours per year'), yCount:4 });
+        const gw = P.w / 8, bw = Math.min(26, gw * 0.26);
+        for (let f = 0; f < 8; f++) {
+          const cx = P.sx(f), wv = FS.winter[f], sv = FS.summer[f];
+          ctx.fillStyle = '#2563EB'; const y1 = P.sy(wv); ctx.fillRect(cx - bw - 1.5, y1, bw, P.y + P.h - y1);
+          ctx.fillStyle = '#D97706'; const y2 = P.sy(sv); ctx.fillRect(cx + 1.5, y2, bw, P.y + P.h - y2);
+          label(ctx, fmt(wv + sv, 0), cx, Math.min(y1, y2) - 5, CH.ink2, FM(9), 'center', 'middle');
+        }
+        swatchKey(ctx, P.x, P.y + P.h + 34,
+          [{ color:'#2563EB', label:t('Winter half-year (Oct–Mar)') },
+           { color:'#D97706', label:t('Summer half-year (Apr–Sep)') }],
+          { cols:2, colWidth:Math.min(230, P.w / 2) });
+      },
+      csv: () => csvRows([[t('Month')].concat(ORI8)]
+        .concat(FS.monthly.map((row, m) => [MONTHS[m]].concat(row.map(v => +v.toFixed(1))))))
+    });
+
     /* --- suggested glazing for this window ---------------------------------
        A single face can disagree with the site read as a whole — a north
        window in a V3 zone still has little to fear from the sun — so this
@@ -6429,11 +6497,12 @@ function saveSession() {
  *  already listens for, rather than reaching into its closure — the form
  *  has no other way to be told about a site chosen from outside itself. */
 function reflectSiteOnSetupForm(site) {
-  const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse');
+  const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse'), latI = $('#inpLat');
   conc.value = site.conc || site.nuts;
   conc.dispatchEvent(new Event('input', { bubbles:true }));
   alt.value = site.alt;
   alt.dispatchEvent(new Event('input', { bubbles:true }));
+  if (latI && isFinite(+site.lat)) latI.value = site.lat;
   use.value = site.use || 'hab';
   $$('#segOp button').forEach(b =>
     b.setAttribute('aria-pressed', b.dataset.op === (site.operation || 'new') ? 'true' : 'false'));
@@ -6590,6 +6659,9 @@ function applySession(data) {
                         price: (s.price === undefined || s.price === '' ? null : s.price) };
   });
   const aa = aaApplyMeta(data);
+  /* An imported study carries exact coordinates in meta.site — the setup
+     latitude field offers them back for anything typed by hand. */
+  if (data.meta && data.meta.site && isFinite(+data.meta.site.lat)) data.site.lat = +data.meta.site.lat;
   reflectSiteOnSetupForm(data.site);
   mountApp(data.site, data.tab);
   return aa ? 'ok-aa' : 'ok';
@@ -8163,7 +8235,7 @@ function concelhoFor(text) {
 const CONC_ALL = Object.keys(CONCELHOS).sort((a, b) => a.localeCompare(b, 'pt'));
 
 function initSetup() {
-  const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse');
+  const conc = $('#selConc'), alt = $('#inpAlt'), use = $('#selUse'), latI = $('#inpLat');
   const view = $('#nutsDisplay'), pick = $('#selNutsPick');
   const preview = $('#zonePreview'), sub = $('#concSub'), altSub = $('#altSub'), go = $('#btnGo');
   const opBtns = $$('#segOp button');
@@ -8369,7 +8441,8 @@ function initSetup() {
     if (!hit || !nuts) { toast('Name a municipality first'); return; }
     const opBtn = $('#segOp button[aria-pressed="true"]');
     mountApp({ conc: hit, nuts: nuts, alt: Math.max(0, +alt.value || 0), use: use.value,
-      operation: opBtn ? opBtn.dataset.op : 'new' });
+      operation: opBtn ? opBtn.dataset.op : 'new',
+      lat: (isFinite(+latI.value) ? +latI.value : 38.7) });
   });
   if (!conc.value.trim()) pickConcelho('Lisboa'); else refresh();
 }
@@ -8559,6 +8632,8 @@ Object.assign(STATIC_PT, {
   fldNutsSub: 'Resolvida a partir do concelho — não se define à mão. As trinta NUTS III da legislação do SCE, Manual SCE, Anexo II.',
   fldAlt: 'Altitude do local',
   fldAltSub: 'Metros acima do nível do mar, no edifício e não nos paços do concelho.',
+  fldLat: 'Latitude do local',
+  fldLatSub: 'Graus decimais norte, para o gráfico de horas de sol — Lisboa 38,7, Porto 41,1, Faro 37,0. Um estudo importado traz a sua.',
   fldUse: 'Utilização do edifício',
   fldUseSub: 'Define qual a coluna da tabela de U máximo que se aplica.',
   useHab: 'Habitação',
@@ -9448,6 +9523,16 @@ Object.assign(PT, {
 /* v2.45.0: per-orientation window area on the suggestion bar. */
 Object.assign(PT, {
   'Area of this window': 'Área deste vão'
+});
+/* v2.46.0: direct-sun hours chart ported from Architecture Advisor PT. */
+Object.assign(PT, {
+  'Direct-sun hours on each facade': 'Horas de sol direto em cada fachada',
+  'Unobstructed vertical facades over the whole year, split by half-year': 'Fachadas verticais desobstruídas ao longo de todo o ano, por semestre',
+  'Winter half-year (Oct–Mar)': 'Semestre de inverno (out–mar)',
+  'Summer half-year (Apr–Sep)': 'Semestre de verão (abr–set)',
+  'reference latitude 38.7° N': 'latitude de referência 38,7° N',
+  'Hours per year': 'Horas por ano',
+  'Month': 'Mês'
 });
 /* v2.43.0: handoff from Architecture Advisor PT. */
 Object.assign(PT, {
