@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.44.0',
+  version:     '2.45.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4130,7 +4130,7 @@ function buildWallsInt(host) {
 }
 
 /* ------------------------------------------------------------ WINDOWS -- */
-const WIN_STATE = { frame:'pvcmad', quad:false, glaz:0, use:'hab', dev:'perspv', ori:4, privacy:false, impact:false };
+const WIN_STATE = { frame:'pvcmad', quad:false, glaz:0, use:'hab', dev:'perspv', ori:4, privacy:false, impact:false, areas:{} };
 
 function buildWindows(host) {
   const Z = STATE.zone;
@@ -4306,11 +4306,20 @@ function buildWindows(host) {
     frag.appendChild(controls([
       selectCtl(t('Orientation'), ORI8.map((o, i) => ({ value:String(i), label:COMPASS8[i] })), String(S.ori),
         v => { S.ori = +v; rerender(); }),
+      /* v2.45.0: glazing area for the chosen orientation — prefilled from the
+         Architecture Advisor handoff (glass + doors per true compass point),
+         or typed by hand; kept per orientation in WIN_STATE.areas. */
+      numCtl(t('Area of this window'), 0, 10000, 0.1,
+        (S.areas && S.areas[ORI8[clamp(S.ori, 0, 7)]] !== undefined) ? S.areas[ORI8[clamp(S.ori, 0, 7)]] : '',
+        v => { S.areas[ORI8[clamp(S.ori, 0, 7)]] = Math.round(v * 10) / 10; checkpoint(); rerender(); }, 'm²'),
       el('div', { class:'divider' }),
       checkCtl(t('Privacy from the street'), S.privacy, v => { S.privacy = v; rerender(); }),
       checkCtl(t('Impact safety is a concern'), S.impact, v => { S.impact = v; rerender(); })
     ]));
     const oi = clamp(S.ori, 0, 7);
+    const areaOi = (S.areas && S.areas[ORI8[oi]] > 0) ? S.areas[ORI8[oi]] : null;
+    const areaSub = (v) => COMPASS8[oi] + ' · ' + t('with the glass chosen above') +
+      (areaOi ? ' · ' + fmt(areaOi, 1) + ' m² → ' + fmt(areaOi * v, 0) + ' kWh' : '');
     const heat1 = Z.gsul * XJ[ORI8[oi]] * Z.M * FWI;
     const cool1 = Z.gsol[oi] * FWV[ORI8[oi]];
     const loadRatio = heat1 > 0 ? cool1 / heat1 : Infinity;
@@ -4326,8 +4335,8 @@ function buildWindows(host) {
     const chipRow = (...labels) => el('div', { style:'display:flex;gap:8px;flex-wrap:wrap;margin:10px 0' },
       labels.map(label => el('span', { class:'pill empty', text:label })));
     frag.appendChild(stats([
-      statCard('Heating admitted here', fmt(win[oi], 0), 'kWh/m²', COMPASS8[oi] + ' · ' + t('with the glass chosen above')),
-      statCard('Cooling admitted here', fmt(sum[oi], 0), 'kWh/m²', COMPASS8[oi] + ' · ' + t('with the glass chosen above')),
+      statCard('Heating admitted here', fmt(win[oi], 0), 'kWh/m²', areaSub(win[oi])),
+      statCard('Cooling admitted here', fmt(sum[oi], 0), 'kWh/m²', areaSub(sum[oi])),
       statCard('What this face asks for', t(bySelect ? 'Prioritise selectivity' : 'Prioritise solar factor'), null,
         Z.key + ' · ' + fmt(STATE.site.alt, 0) + ' m'),
       /* The answer to the three cards before it, so it is the one card on the
@@ -6461,6 +6470,15 @@ function aaApplyMeta(data) {
   const bs = (data.state && data.state.BUDGET_STATE) || {};
   AA_STATE.budgetKeys = ['roof','ground','wext','win'].filter(k => bs[k] &&
     bs[k].area !== null && bs[k].area !== undefined && bs[k].area !== '');
+  /* Glazing area per true orientation for the Windows tab suggestion box:
+     glass + doors of each compass bucket (ventilation bricks are not
+     windows; clerestory and roof lights carry no orientation here). A file
+     of the student's own that already holds areas keeps them — this only
+     runs on a handoff, which always follows a reset. */
+  const wa = {};
+  Object.keys(fac).forEach(c => { const b = fac[c], g = b.glass + b.doors;
+    if (g > 0) wa[c] = Math.round(g * 10) / 10; });
+  WIN_STATE.areas = wa;
   return true;
 }
 /** A student typing their own area over an imported one removes the
@@ -9426,6 +9444,10 @@ PT_HINT['mat-zone'] =
 /* v2.41.0: native .odp output for LibreOffice. */
 Object.assign(PT, {
   'Download the .odp file': 'Descarregar o ficheiro .odp'
+});
+/* v2.45.0: per-orientation window area on the suggestion bar. */
+Object.assign(PT, {
+  'Area of this window': 'Área deste vão'
 });
 /* v2.43.0: handoff from Architecture Advisor PT. */
 Object.assign(PT, {
