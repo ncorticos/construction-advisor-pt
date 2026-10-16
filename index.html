@@ -626,7 +626,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.47.0',
+  version:     '2.48.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4290,49 +4290,20 @@ function buildWindows(host) {
       'The selectivity index is light admitted per unit of solar heat: <code>IS = T<sub>L</sub> ÷ g</code>. Ordinary clear double glazing sits near <b>%1</b>. A summer-led face favours selectivity, because the object is to keep the daylight and lose the heat; a winter-led face favours solar factor, because the object is to collect. Neither reading needs a trade name — U<sub>g</sub>, T<sub>L</sub> and g are the specification a supplier is asked to match.',
       [fmt(GLAZ_PLAIN.tl / (100 * GLAZ_PLAIN.g), 2)]));
 
-    /* --- gain by orientation ---------------------------------------------- */
+    /* --- gain by orientation (kept as data: the suggestion stats below read
+           win[oi]/sum[oi]/heat1/cool1; v2.48.0 removed the chart panel) ------ */
     const win = ORI8.map(o => Z.gsul * XJ[o] * Z.M * FWI * G.g);
     const sum = ORI8.map((o, i) => Z.gsol[i] * FWV[o] * G.g);
     const ORI9 = ORI8.concat(['H']);
     const win9 = win.concat([Z.gsul * XJ.H * Z.M * FWI * G.g]);
     const sum9 = sum.concat([Z.gsolH * FWV.H * G.g]);
-    frag.appendChild(section('What one square metre of this glass admits', 'Per square metre of glazing, per season',
-      'win-orientation', () => csvRows([['Orientation','Heating season (kWh/m²)','Cooling season (kWh/m²)']]
-        .concat(ORI9.map((o, i) => [o, win9[i].toFixed(0), sum9[i].toFixed(0)])))));
-    makePanel(frag, {
-      title: 'Admitted solar energy by orientation',
-      note: 'The tabulated energy on each face, through the solar factor of the chosen glass, corrected for angular selectivity',
-      aspect: 2.4,
-      render(ctx, W, H) {
-        const mx = Math.max.apply(null, win9.concat(sum9));
-        const P = plotRect(56, 18, W - 70, H - 18 - 62, -0.5, 8.5, 0, niceDomain(0, mx, 5, 0.06)[1]);
-        drawAxes(ctx, P, { xTicks:[], yLabel:'kWh/m²', yCount:5 });
-        const half = (P.w / 9) * 0.19;
-        ORI9.forEach((o, i) => {
-          const cx = P.sx(i);
-          const bar = (v, dx, col) => { const y = P.sy(v); ctx.fillStyle = col; ctx.fillRect(cx + dx - half, y, half * 2, P.y + P.h - y); };
-          bar(win9[i], -half * 1.1, '#2563EB');
-          bar(sum9[i],  half * 1.1, '#C4442A');
-          label(ctx, i < 8 ? COMPASS8[i] : 'H', cx, P.y + P.h + 14, CH.ink2, F(11, '600'), 'center', 'middle');
-        });
-        swatchKey(ctx, P.x, P.y + P.h + 34,
-          [{ color:'#2563EB', label:'Heating season — this is the gain you want' },
-           { color:'#C4442A', label:'Cooling season — this is the gain you must shade' }],
-          { cols:2, colWidth:250 });
-      },
-      csv: () => csvRows([['Orientation','Heating','Cooling']]
-        .concat(ORI9.map((o, i) => [o, win9[i].toFixed(0), sum9[i].toFixed(0)])))
-    });
-    frag.appendChild(hint('win-orientation-note',
-      'With a solar factor of %1, a square metre facing south admits <b>%2 kWh</b> over the heating season and <b>%3 kWh</b> over the cooling season; the same square metre facing west admits <b>%4</b> and <b>%5</b>, and facing north <b>%6</b> and <b>%7</b>. West earns little and costs most — low sun that fixed shading serves worst — which is the argument the next page makes with numbers.',
-      [fmt(G.g, 2), fmt(win[4], 0), fmt(sum[4], 0), fmt(win[6], 0), fmt(sum[6], 0), fmt(win[0], 0), fmt(sum[0], 0)]));
 
     /* --- direct-sun hours, ported from Architecture Advisor PT --------------
        The same geometric reference as over there — unobstructed vertical
        facades over the whole year, split by half-year — computed at this
-       site's own latitude. Kept next to the regulation admitted energy above
-       so the two quantities read together: hours are solar geometry, kWh are
-       the manual's tables through the chosen glass. */
+       site's own latitude. The per-face admitted kWh behind the suggestion
+       below come from the same win/sum arrays (manual tables through the
+       chosen glass, angular-corrected). */
     const sunLat = (STATE.site && isFinite(+STATE.site.lat)) ? +STATE.site.lat : 38.7;
     const sunLatKnown = !!(STATE.site && isFinite(+STATE.site.lat));
     const FS = facadeSun(sunLat, -9.0);
