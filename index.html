@@ -626,7 +626,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.48.0',
+  version:     '2.49.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6644,6 +6644,14 @@ function loadSessionFile(file) {
     let data;
     try { data = JSON.parse(reader.result); }
     catch (e) { toast('That file could not be read'); return; }
+    /* v2.49.0: an Architecture Advisor "Save study" file carries this app's
+       hand-off inside it — open that; an older one without it says how to
+       get one, rather than "not a Construction Advisor file". */
+    if (data && data.kind === 'architecture-advisor-study') {
+      if (!data.construction) { toast('This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction'); return; }
+      data = data.construction;
+    }
+    if (STATE.site && !confirm(t('Replace the current assessment with this file?'))) return;
     const result = applySession(data);
     if (result === 'wrong-app') toast('That is not a ' + APP.name + ' file');
     else if (result === 'bad-data') toast('That file is missing information this needs');
@@ -6692,6 +6700,17 @@ fileLoad.addEventListener('change', () => {
 });
 $('#btnSave').addEventListener('click', saveSession);
 $('#btnLoadSetup').addEventListener('click', triggerLoad);
+/* v2.49.0: a saved assessment, a construction hand-off or an Architecture
+   Advisor study can also be dropped anywhere on the page, at any point —
+   asking first when it would replace an assessment in progress. */
+window.addEventListener('dragover', ev => { if (ev.dataTransfer && [...(ev.dataTransfer.types || [])].indexOf('Files') >= 0) ev.preventDefault(); });
+window.addEventListener('drop', ev => {
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+  if (!f) return;
+  ev.preventDefault();
+  if (!/\.json$/i.test(f.name) && f.type !== 'application/json') { toast('That file could not be read'); return; }
+  loadSessionFile(f);
+});
 $('#btnRestart').addEventListener('click', () => {
   if (confirm(t('Discard the current assessment and start over?'))) restartAssessment();
 });
@@ -8555,6 +8574,26 @@ initSetup();
      so content built during the parse would bake in English fallbacks. */
   window.addEventListener('DOMContentLoaded', () => {
     if (STATE.site) return;
+    /* v2.49.0: the study can arrive in the address (#aa=…, the fragment
+       never leaves the browser) — independent of storage, private windows
+       and tabs opened earlier; the address is cleaned at once so a reload
+       or a shared link does not re-import over later work. */
+    const hm = /^#aa=(.+)$/.exec(location.hash || '');
+    if (hm) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      let p = null;
+      try { p = JSON.parse(decodeURIComponent(hm[1])); } catch (e) { toast('The study in the address could not be read'); }
+      if (p) {
+        const r0 = applySession(p);
+        if (r0 === 'ok-aa' || r0 === 'ok') {
+          try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
+          undoReset();
+          toast('Study imported from Architecture Advisor');
+          return;
+        }
+        toast('That file is missing information this needs');
+      }
+    }
   let raw = null;
   try { raw = localStorage.getItem(AA_HANDOFF_KEY); } catch (e) { return; }
   if (!raw) return;
@@ -8570,7 +8609,7 @@ initSetup();
   if (r === 'ok-aa') {
     try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
     undoReset();
-    toast(t('Study imported from Architecture Advisor'));
+    toast('Study imported from Architecture Advisor');
   }
   });
 })();
@@ -9508,6 +9547,9 @@ Object.assign(PT, {
 /* v2.43.0: handoff from Architecture Advisor PT. */
 Object.assign(PT, {
   'Study imported from Architecture Advisor': 'Estudo importado do Architecture Advisor',
+  'This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction': 'Este estudo do Architecture Advisor é anterior à passagem — abra-o lá e carregue em Continuar para a Construção',
+  'Replace the current assessment with this file?': 'Substituir a avaliação em curso por este ficheiro?',
+  'The study in the address could not be read': 'Não foi possível ler o estudo no endereço',
   'From the Architecture Advisor': 'Do Architecture Advisor',
   'Measured envelope, as decided there — areas follow true solar orientation': 'Envolvente medida, tal como decidida nessa aplicação — as áreas seguem a orientação solar verdadeira',
   'Storeys': 'Pisos',
