@@ -86,7 +86,7 @@ nav.tabs{border-bottom:1px solid var(--line); background:#fff}
 
 /* ---------- Layout ---------- */
 main{max-width:1680px; margin:0 auto; padding:0 24px 44px}
-section.page{display:none; padding-top:26px}
+section.page{display:none; padding-top:18px}
 section.page.on{display:block}
 .pagehead{margin-bottom:14px; max-width:760px}
 .pagehead h2{font-size:19px; letter-spacing:-0.02em}
@@ -228,7 +228,7 @@ abbr.gl:focus{box-shadow:0 0 0 2px #cfd8ea}
 #tip.gloss b{display:block; margin-bottom:3px; color:#fff}
 
 /* ---------- Drop zone ---------- */
-#empty{padding:18px 24px 20px; max-width:1000px; margin:0 auto}
+#empty{padding:18px 0 20px}
 .explain{display:flex; flex-direction:column; gap:16px; margin-top:14px}
 .explain h4{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink)}
 .explain p{font-size:12px; color:var(--muted); margin:5px 0 0; line-height:1.6}
@@ -307,12 +307,17 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
    application knows about a place is entered here: the municipality, which
    fixes the NUTS III, and the altitude, which corrects it. */
 .setup{
-  max-width:860px; margin:0 auto; padding:34px 30px 30px;
-  border:1px solid var(--line); border-radius:14px; background:var(--panel);
-  box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 26px rgba(16,24,40,.05);
+  max-width:980px; margin:0; padding:16px 18px 14px;
+  border:1px solid var(--line); border-radius:9px; background:var(--wash);
 }
 .setup-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px 22px; margin-bottom:20px}
 @media(max-width:700px){.setup-grid{grid-template-columns:1fr}}
+/* v2.51.0: the phone header as the Architecture Advisor keeps it — the
+   name, the site and the language on screen */
+@media(max-width:1100px){.brand span{display:none}}
+@media(max-width:700px){main{padding:0 14px 36px}.hbar{padding:8px 14px; gap:10px}.tabs-inner{padding:0 14px}
+  .brand{flex:0 1 auto; min-width:0}.brand b{font-size:clamp(12px,3.45vw,14px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .filechip .meta,.filechip .loc{display:none}.filechip{gap:8px}.filechip .btn{padding:5px 9px; white-space:nowrap}}
 @media(max-width:420px){.hbar{gap:8px}.filechip .btn{padding:5px 7px}}
 .fld{display:flex; flex-direction:column; gap:5px; min-width:0}
 .fld>label{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
@@ -347,7 +352,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 }
 .combo-menu .opt:hover,.combo-menu .opt.active{background:var(--wash)}
 .combo-menu .empty{padding:10px; font-size:12.5px; color:var(--faint)}
-.setup .cta{display:flex; flex-direction:column; align-items:stretch; gap:8px; margin:14px 0 6px}
+.setup .cta{display:flex; flex-direction:column; align-items:stretch; gap:8px; margin:0 0 6px}
 .setup .cta .zonechip{justify-content:center}
 .setup .cta .btn{padding:10px 14px; font-size:13.5px}
 .setup .cta .btn.solid{padding:14px; font-size:15.5px}
@@ -456,7 +461,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
     <div class="filechip sitechip" id="sitechip">
       <span class="loc" id="chipLoc"></span>
       <span class="meta" id="chipMeta"></span>
-      <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Restart</button>
+      <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Change the site</button>
     </div>
     <div class="langsel" id="langsel" role="group" aria-label="Language / Idioma">
       <button type="button" data-lang="en" aria-pressed="true" title="English">EN</button>
@@ -626,7 +631,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.50.0',
+  version:     '2.51.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6644,6 +6649,7 @@ function applySession(data) {
   /* An imported study carries exact coordinates in meta.site — the setup
      latitude field offers them back for anything typed by hand. */
   if (data.meta && data.meta.site && isFinite(+data.meta.site.lat)) data.site.lat = +data.meta.site.lat;
+  if (data.meta && data.meta.site && isFinite(+data.meta.site.lon)) data.site.lon = +data.meta.site.lon;
   reflectSiteOnSetupForm(data.site);
   mountApp(data.site, data.tab);
   return aa ? 'ok-aa' : 'ok';
@@ -8465,8 +8471,12 @@ function mountApp(site, keepTab) {
   $('#tabsNav').hidden = false;
   $('#sitechip').classList.add('on');
   $('#chipLoc').textContent = site.conc || site.nuts;
-  $('#chipMeta').innerHTML = site.nuts + ' · ' + fmt(site.alt, 0) + ' m '
-    + '<span class="zn">' + STATE.zone.wz + ' ' + STATE.zone.sz + '</span>';
+  /* v2.51.0: the chip as the Architecture Advisor writes it — coordinates
+     where known, altitude, the SCE zones in one pill */
+  const ll = isFinite(+site.lat) && isFinite(+site.lon)
+    ? fmt(Math.abs(site.lat), 2) + '° ' + (site.lat < 0 ? 'S' : 'N') + ' ' + fmt(Math.abs(site.lon), 2) + '° ' + (site.lon < 0 ? 'W' : 'E') : site.nuts;
+  $('#chipMeta').innerHTML = ll + ' · ' + fmt(site.alt, 0) + ' m '
+    + '<span class="zn">' + STATE.zone.wz + ' · ' + STATE.zone.sz + '</span>';
   document.title = APP.tabName + ' — ' + (site.conc || site.nuts);
 
   const tl = $('#tablist'); tl.innerHTML = '';
@@ -8679,7 +8689,7 @@ Object.assign(STATIC_PT, {
   btnGo: 'Percorrer a envolvente',
   btnLoadSetup: 'Continuar uma avaliação guardada',
   btnSave: 'Guardar',
-  btnRestart: 'Recomeçar',
+  btnRestart: 'Mudar de local',
   ex1h: 'Fundado na regulamentação e não numa regra prática',
   ex1p: 'Clima de referência por NUTS III e os seus declives em altitude, coeficientes de transmissão térmica máximos por zona e região, fator solar admissível por inércia, coeficientes de pavimentos térreos por dimensão característica — lidos no Manual SCE e na Portaria, e citados onde são usados.',
   ex2h: 'Componha o elemento, leia o número',
