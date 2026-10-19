@@ -626,7 +626,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.49.0',
+  version:     '2.50.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5579,7 +5579,17 @@ function buildShading(host) {
 const AA_HANDOFF_KEY = 'arca-handoff-construction';
 const AA_ORDER = ['N','NE','E','SE','S','SW','W','NW'];
 const AA_STATE = { present:false, savedAt:null, fromApp:null, fromVer:null,
-  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[] };
+  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[], study:null };
+/* v2.50.0: the way back. The Architecture Advisor study that came with the
+   hand-off is kept (and saved with this assessment), so the student can
+   reopen that same design there; it travels in the address, as it came. */
+const AA_URL = 'https://ncorticos.github.io/architecture-advisor-pt/';
+function backToArchitecture() {
+  const st = AA_STATE.study;
+  const w = window.open(AA_URL + (st ? '#study=' + encodeURIComponent(JSON.stringify(st)) : ''), '_blank');
+  if (!w) toast('The browser blocked the new tab — allow pop-ups for this site');
+  else if (!st) toast('No Architecture Advisor study came with this assessment — it opens at its start');
+}
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
   FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE, AA_STATE
@@ -6630,6 +6640,7 @@ function applySession(data) {
                         price: (s.price === undefined || s.price === '' ? null : s.price) };
   });
   const aa = aaApplyMeta(data);
+  if (data.meta && data.meta.study && typeof data.meta.study === 'object') AA_STATE.study = data.meta.study;
   /* An imported study carries exact coordinates in meta.site — the setup
      latitude field offers them back for anything typed by hand. */
   if (data.meta && data.meta.site && isFinite(+data.meta.site.lat)) data.site.lat = +data.meta.site.lat;
@@ -6649,7 +6660,9 @@ function loadSessionFile(file) {
        get one, rather than "not a Construction Advisor file". */
     if (data && data.kind === 'architecture-advisor-study') {
       if (!data.construction) { toast('This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction'); return; }
+      const back = Object.assign({}, data); delete back.readout; delete back.construction;
       data = data.construction;
+      data.meta = Object.assign({}, data.meta, { study:back });
     }
     if (STATE.site && !confirm(t('Replace the current assessment with this file?'))) return;
     const result = applySession(data);
@@ -8494,6 +8507,16 @@ function mountApp(site, keepTab) {
     }
     un.className = 'tab cadbtn'; un.hidden = false; un.disabled = !UNDO.stack.length;
     tl.appendChild(un);
+    let bk = document.querySelector('#btnBackAA');
+    if (!bk) {
+      bk = el('button', { class:'tab cadbtn', id:'btnBackAA', 'data-t':'btnBackAA' });
+      bk.title = 'Reopen this project in Architecture Advisor PT';
+      bk.dataset.en = '◂ Back to Architecture';
+      bk.innerHTML = (LANG === 'pt' && STATIC_PT['btnBackAA'] !== undefined) ? STATIC_PT['btnBackAA'] : '◂ Back to Architecture';
+      bk.addEventListener('click', backToArchitecture);
+    }
+    bk.className = 'tab cadbtn'; bk.hidden = false;
+    tl.appendChild(bk);
     undoReset();
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
@@ -8633,6 +8656,7 @@ initSetup();
 Object.assign(STATIC_PT, {
   btnExport: 'Exportar',
   btnUndo: 'Anular',
+  btnBackAA: '◂ Voltar à Arquitetura',
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
   setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, abrindo depois um mosaico de materiais — naturais e industrializados, próprios da região — antes de percorrer a envolvente elemento a elemento perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
@@ -9550,6 +9574,9 @@ Object.assign(PT, {
   'This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction': 'Este estudo do Architecture Advisor é anterior à passagem — abra-o lá e carregue em Continuar para a Construção',
   'Replace the current assessment with this file?': 'Substituir a avaliação em curso por este ficheiro?',
   'The study in the address could not be read': 'Não foi possível ler o estudo no endereço',
+  'The browser blocked the new tab — allow pop-ups for this site': 'O navegador bloqueou o novo separador — permita janelas para este sítio',
+  'No Architecture Advisor study came with this assessment — it opens at its start': 'Nenhum estudo do Architecture Advisor veio com esta avaliação — abre no início',
+  'Reopen this project in Architecture Advisor PT': 'Reabrir este projeto no Architecture Advisor PT',
   'From the Architecture Advisor': 'Do Architecture Advisor',
   'Measured envelope, as decided there — areas follow true solar orientation': 'Envolvente medida, tal como decidida nessa aplicação — as áreas seguem a orientação solar verdadeira',
   'Storeys': 'Pisos',
