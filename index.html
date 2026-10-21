@@ -636,7 +636,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.52.0',
+  version:     '2.53.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -2731,8 +2731,12 @@ const controls = kids => el('div', { class:'controls' }, kids.filter(Boolean));
  * standing with an explanation rather than blanking it.
  */
 function rebuildable(host, build) {
+  /* v2.53.0: replaces only the nodes it built, in place — the cost panel
+     appended to the same page host after it used to vanish on the first
+     control change. */
+  let mine = [];
   const run = () => {
-    const old = Array.from(host.childNodes);
+    const old = mine.filter(n => n.parentNode === host);
     const frag = document.createDocumentFragment();
     const checked = () => { checkpoint(); run(); };
     try {
@@ -2747,8 +2751,10 @@ function rebuildable(host, build) {
       if (old.some(n => n.contains && n.contains(p.root))) { p.ro && p.ro.disconnect(); p.io && p.io.disconnect(); return false; }
       return true;
     });
+    mine = Array.from(frag.childNodes);
+    if (old.length) host.insertBefore(frag, old[0]); else host.appendChild(frag);
     old.forEach(n => n.remove());
-    host.appendChild(frag);
+    refreshCostLinks();
     requestAnimationFrame(redrawVisiblePanels);
     setTimeout(redrawVisiblePanels, 150);
   };
@@ -3282,6 +3288,7 @@ function assemblyEditor(host, spec) {
 
     checkpoint();
     if (spec.onchange) spec.onchange(A);
+    refreshCostLinks();
   }
   render();
   return { rerender: render };
@@ -6842,63 +6849,136 @@ function budgetTotals() {
   return { per, sum, n };
 }
 /* Closest Gerador unit for an element, read off the student's own assembly
-   so the button lands on the price, not on a chapter index. Chapter links in
-   COST_PANELS stay as the fallback. */
+   so the button lands on a unit page, not on a chapter index. Each URL is a
+   Portugal unit page (obra nova) of the bank; the app links to it and never
+   copies its price. Where one m² of the element is priced in the bank as
+   several units (a cavity wall: two leaves; a floor: base + insulation +
+   finish), the extra units travel in `also` and the student adds them up.
+   Chapter links in COST_PANELS stay as the fallback when no unit fits, and
+   as the way in if the bank renames a page. */
 const GDP_U = {
-  roofTile: GDP_BASE + '/Coberturas/Inclinadas/Telhados/Cobertura_inclinada_de_telhas.html',
-  pavCer: GDP_BASE + '/Revestimentos/Pavimentos/De_pecas_ceramicas/RSG110_Pavimento_interior_de_pecas_de_gres.html',
-  groundBase: GDP_BASE + '/Revestimentos/Pavimentos/Bases_de_pavimento/Base_de_argamassa_de_cimento.html',
-  wextCavity: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFZ_Pano_exterior_para_revestir_em/FFZ010_Pano_exterior_de_fachada_dupla__de_.html',
+  roofPitched: GDP_BASE + '/Coberturas/Inclinadas/Telhas/QTT010_Cobertura_inclinada_de_telhas_ceram.html',
+  roofFixed: GDP_BASE + '/Coberturas/Planas/Acessiveis_nao_ventiladas/QAB012_Cobertura_plana_acessivel__nao_vent.html',
+  roofInvAcc: GDP_BASE + '/Coberturas/Planas_acessiveis__nao_ventiladas/Com_pavimento_flutuante_isolante/QAG021_Cobertura_plana_acessivel__nao_vent.html',
+  roofGravel: GDP_BASE + '/Coberturas/QD_Planas_nao_acessiveis__nao_ven/Com_godo/QDB020_Cobertura_plana_nao_acessivel__nao_.html',
+  finCer: GDP_BASE + '/Revestimentos/Pavimentos/Ceramicos/RSG310_Pavimento_interior_de_pecas_de_gres.html',
+  finWood: GDP_BASE + '/Revestimentos/Pavimentos/De_madeira/Soalho_de_madeira_para_interior.html',
+  screed: GDP_BASE + '/Revestimentos/Pavimentos/RSB_Bases_de_pavimentacao_e_grande/Base_de_argamassa_de_cimento.html',
+  insUnder: GDP_BASE + '/Isolamentos_e_impermeabilizacoes/Isolamentos_termicos/Sob_lajes/NAD020_Isolamento_termico_sob_laje__com_ar.html',
+  slab: GDP_BASE + '/Acondicionamento_do_terreno/Nivelacao/Lajes_terreas/Massame_de_betao.html',
+  insSlab: GDP_BASE + '/Isolamentos_e_impermeabilizacoes/Isolamentos_termicos/Lajes_terreas/NAK010_Isolamento_termico_horizontal_de_la.html',
+  wextEtics: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Fachadas_ETICS/FSM_Revestimento_continuo_mineral_/FSM010_Sistema_ETICS_de_isolamento_termico.html',
+  wextEticsBase: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Fachadas_ETICS/FSR_Pano_principal_de_alvenaria_pa/FSR040_Pano_principal_de_fachada_ETICS__de.html',
+  wextOuter: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFZ_Pano_exterior_para_revestir_em/FFZ015_Pano_exterior_de_fachada_dupla__de_.html',
+  wextInner: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFT_Pano_interior_com_isolamento_i/FFT020_Pano_interior_de_fachada_dupla__de_.html',
   wextSingle: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/Fachada_simples_para_revestir/FFF010_Fachada_simples__de_alvenaria_de_ti.html',
   wintBrick: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Alvenaria_nao_estrutural/FFQ_Pano_para_revestir_em_parede_d/FFQ010_Pano_de_parede_divisoria_interior__.html',
-  wintGesso: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Paredes_divisorias_de_placas.html',
+  wintGesso: GDP_BASE + '/Fachadas__divisoes_e_proteccoes/Paredes_divisorias_de_placas/De_placas_de_gesso_laminado/Parede_de_placas_de_gesso_laminado.html',
   winPVC: GDP_BASE + '/Vaos/Caixilharias/De_PVC/Caixilharia_exterior_em_PVC.html',
-  winAlu: GDP_BASE + '/Vaos/Caixilharias/De_aluminio.html',
-  winWood: GDP_BASE + '/Vaos/Caixilharias/De_madeira.html'
+  winWood: GDP_BASE + '/Vaos/Caixilharias/De_madeira/Caixilharia_exterior_de_madeira.html',
+  winWoodAlu: GDP_BASE + '/Vaos/Caixilharias/De_madeira_e_aluminio/LCC010_Caixilharia_exterior_de_madeira_e_a.html',
+  winAlu: GDP_BASE + '/calculaprecio.asp?Valor=0%7C0%7C1%7CLCL060%7Clcl_060%3A_0_1c5_0_1c5_0_1c5_0_1'
 };
+const MASONRY_KEYS = ['tijolo11','tijolo15','tijolo22','tijolom','blococ','blocol','betaocel'];
+/* Layers run from outside inwards; air gaps carry no key. */
+const solid = ST => (ST.layers || []).filter(L => !L.air && L.key);
+const firstIdx = (arr, test) => { for (let i = 0; i < arr.length; i++) if (test(arr[i])) return i; return -1; };
+const isIns = L => !!(MAT[L.key] && MAT[L.key].ins);
+function floorUnits(ST, base) {
+  /* Floors: the finish on top names the main unit; screed, insulation and
+     the structural base it sits on are the units to add. */
+  const ls = solid(ST), top = ls.length ? ls[0].key : '';
+  const also = [];
+  if (ls.some(L => L.key === 'betonilha')) also.push({ link:GDP_U.screed, label:'R · Base de argamassa de cimento' });
+  base.forEach(u => also.push(u));
+  if (top === 'ceramico') return { link:GDP_U.finCer, linkLabel:'R · Pavimento interior de grés', also:also };
+  if (top === 'soalho') return { link:GDP_U.finWood, linkLabel:'R · Soalho de madeira para interior', also:also };
+  if (also.length) return { link:also[0].link, linkLabel:also[0].label, also:also.slice(1) };
+  return null;
+}
 function closestPrice(key) {
-  const F = GDP_BASE;
-  const has = (ST, sub) => (ST.layers || []).some(L => !L.air && L.key && L.key.indexOf(sub) >= 0);
   if (key === 'roof') {
-    const tiled = (ROOF_STATE.layers || []).some(L => !L.air && L.key &&
-      (L.key.indexOf('telh') >= 0 || L.key.indexOf('ardos') >= 0 || L.key === 'ceramico'));
-    return tiled
-      ? { link:GDP_U.roofTile, linkLabel:'Q · Cobertura inclinada de telhas' }
-      : { link:F + '/Coberturas.html', linkLabel:'Q · Coberturas' };
+    const rt = AA_STATE.roof && AA_STATE.roof.type;
+    if (rt && rt !== 'flat')
+      return { link:GDP_U.roofPitched, linkLabel:'Q · Cobertura inclinada de telhas cerâmicas' };
+    const ls = solid(ROOF_STATE);
+    if (!ls.length) return null;
+    const wp = firstIdx(ls, L => L.key === 'imperm'), ins = firstIdx(ls, isIns);
+    const inverted = ins >= 0 && wp >= 0 && ins < wp;          // insulation above the membrane
+    if (ls[0].key === 'seixo')
+      return { link:GDP_U.roofGravel, linkLabel:'Q · Cobertura plana não acessível, com godo' };
+    if (inverted)
+      return { link:GDP_U.roofInvAcc, linkLabel:'Q · Cobertura plana acessível, tipo invertida' };
+    if (wp >= 0 && ['ceramico','pedran','betonilha'].indexOf(ls[0].key) >= 0)
+      return { link:GDP_U.roofFixed, linkLabel:'Q · Cobertura plana acessível, com pavimento fixo' };
+    return null;
   }
-  if (key === 'pav') return { link:GDP_U.pavCer, linkLabel:'R · Pavimento de grés esmaltado' };
-  if (key === 'ground') return { link:GDP_U.groundBase, linkLabel:'R · Base de argamassa de cimento' };
+  if (key === 'pav') {
+    const ls = solid(PAV_STATE);
+    const slab = firstIdx(ls, L => /^(laje|betao)/.test(L.key));
+    const insBelow = slab >= 0 && ls.slice(slab + 1).some(isIns);   // insulation on the soffit
+    return floorUnits(PAV_STATE, insBelow ? [{ link:GDP_U.insUnder, label:'N · Isolamento térmico sob laje' }] : []);
+  }
+  if (key === 'ground') {
+    const base = [];
+    if (solid(FLR_STATE).some(isIns)) base.push({ link:GDP_U.insSlab, label:'N · Isolamento térmico horizontal de lajes térreas' });
+    base.push({ link:GDP_U.slab, label:'A · Massame de betão' });
+    return floorUnits(FLR_STATE, base);
+  }
   if (key === 'wext') {
-    const cavity = (WEXT_STATE.layers || []).some(L => L.air);
-    return cavity
-      ? { link:GDP_U.wextCavity, linkLabel:'F · Pano exterior de fachada dupla' }
-      : { link:GDP_U.wextSingle, linkLabel:'F · Fachada simples de tijolo' };
+    const ls = solid(WEXT_STATE);
+    const mas = firstIdx(ls, L => MASONRY_KEYS.indexOf(L.key) >= 0);
+    if (mas < 0) return null;
+    if ((WEXT_STATE.layers || []).some(L => L.air))
+      return { link:GDP_U.wextOuter, linkLabel:'F · Pano exterior de fachada dupla',
+        also:[{ link:GDP_U.wextInner, label:'F · Pano interior de fachada dupla, com isolamento' }] };
+    if (ls.slice(0, mas).some(isIns))
+      return { link:GDP_U.wextEtics, linkLabel:'F · Sistema ETICS de isolamento térmico',
+        also:[{ link:GDP_U.wextEticsBase, label:'F · Pano principal de fachada ETICS, de tijolo' }] };
+    return { link:GDP_U.wextSingle, linkLabel:'F · Fachada simples de alvenaria de tijolo' };
   }
   if (key === 'wint') {
-    const gesso = (WINT_STATE.layers || []).some(L => !L.air && L.key === 'gesso');
-    const masonry = (WINT_STATE.layers || []).some(L => !L.air && L.key &&
-      (L.key.indexOf('tijolo') === 0 || L.key.indexOf('bloco') === 0));
-    return (gesso && !masonry)
-      ? { link:GDP_U.wintGesso, linkLabel:'F · Paredes divisórias de placas' }
-      : { link:GDP_U.wintBrick, linkLabel:'F · Parede divisória de tijolo' };
+    const ls = solid(WINT_STATE);
+    if (ls.some(L => MASONRY_KEYS.indexOf(L.key) >= 0))
+      return { link:GDP_U.wintBrick, linkLabel:'F · Pano de parede divisória de tijolo' };
+    if (ls.some(L => L.key === 'gesso'))
+      return { link:GDP_U.wintGesso, linkLabel:'F · Parede de placas de gesso laminado' };
+    return null;
   }
   if (key === 'win') {
-    const fr = (WIN_STATE.frame || '');
-    if (fr === 'metal') return { link:GDP_U.winAlu, linkLabel:'L · Caixilharias de alumínio' };
-    if (fr === 'mad') return { link:GDP_U.winWood, linkLabel:'L · Caixilharias de madeira' };
-    if (fr === 'pvcmad') return { link:GDP_U.winPVC, linkLabel:'L · Caixilharia exterior em PVC' };
-    return { link:F + '/Vaos.html', linkLabel:'L · Vãos' };
+    const perUnit = 'Window units are priced per opening (Ud), not per m²: divide the unit price by the width × height in its description before entering it here.';
+    const fr = WIN_STATE.frame || '';
+    if (fr === 'metal') return { link:GDP_U.winAlu, linkLabel:'L · Caixilharia exterior de alumínio', note:perUnit };
+    if (fr === 'pvcmad') return { link:GDP_U.winPVC, linkLabel:'L · Caixilharia exterior em PVC', note:perUnit,
+      also:[{ link:GDP_U.winWood, label:'L · Caixilharia exterior de madeira' },
+            { link:GDP_U.winWoodAlu, label:'L · Caixilharia exterior de madeira e alumínio' }], alt:true };
+    return null;
   }
   return null;
+}
+/* Cost panels on screen, so a layer edit re-points their links at once. */
+const COST_LIVE = [];
+function refreshCostLinks() {
+  for (let i = COST_LIVE.length - 1; i >= 0; i--) {
+    if (!COST_LIVE[i].box.isConnected) COST_LIVE.splice(i, 1);
+    else COST_LIVE[i].render();
+  }
 }
 /* One quantity/budget panel. cfg: {key, link, linkLabel, unitHint}. */
 function costPanel(host, cfg) {
   const S = BUDGET_STATE[cfg.key];
-  const near = closestPrice(cfg.key) || {};
-  const blink = near.link || cfg.link, blabel = near.linkLabel || cfg.linkLabel;
   const box = el('div');
   host.appendChild(box);
+  COST_LIVE.push({ box:box, render:() => render() });
+  const aEsc = u => u.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const aTag = (u, lab) => '<a href="' + aEsc(u) + '" target="_blank" rel="noopener noreferrer">' + lab + '</a>';
   function render() {
+    const near = closestPrice(cfg.key) || {};
+    const blink = near.link || cfg.link, blabel = near.linkLabel || cfg.linkLabel;
+    const also = (near.also || []).map(u => aTag(u.link, u.label)).join('; ');
+    const extra = (also ? ' ' + t(near.alt ? 'Alternatives for the same frame family:' : 'Add, for the same m²:') + ' ' + also + '.' : '')
+      + (near.note ? ' ' + t(near.note) : '')
+      + (near.link ? ' ' + t('Page moved? Browse the chapter:') + ' ' + aTag(cfg.link, cfg.linkLabel) + '.' : '');
     box.innerHTML = '';
     const B = budgetTotals();
     const mine = B.per[cfg.key];
@@ -6951,8 +7031,8 @@ function costPanel(host, cfg) {
           el('span', { html:t('Overall budget') + ' (' + t(B.n + ' of ' + BUDGET_ORDER.length + ' priced items') + '): <b>' + euro(B.sum) + '</b>' }),
           el('span', { html:'<span style="color:var(--muted)">' + t('Visiting each tab refreshes this total.') + '</span>' })
         ]),
-        el('p', { class:'costlink', html:t('Reference price at') + ' <a href="' + blink + '" target="_blank" rel="noopener noreferrer">' + blabel + '</a>'
-          + ' — Gerador de Preços, CYPE. ' + t(cfg.unitHint || '')
+        el('p', { class:'costlink', html:t('Reference price at') + ' ' + aTag(blink, blabel)
+          + ' — Gerador de Preços, CYPE.' + extra + ' ' + t(cfg.unitHint || '')
           + ' ' + t('Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.') })
       ])
     ]));
@@ -9563,6 +9643,10 @@ Object.assign(PT, {
   'Overall budget': 'Orçamento global',
   'Visiting each tab refreshes this total.': 'A visitar cada separador actualiza este total.',
   'Reference price at': 'Preço de referência em',
+  'Add, for the same m²:': 'Somar, para o mesmo m²:',
+  'Alternatives for the same frame family:': 'Alternativas para a mesma família de caixilho:',
+  'Page moved? Browse the chapter:': 'Página mudou de endereço? Percorrer o capítulo:',
+  'Window units are priced per opening (Ud), not per m²: divide the unit price by the width × height in its description before entering it here.': 'As caixilharias têm preço por vão (Ud), não por m²: dividir o preço unitário pela largura × altura indicadas na descrição antes de o registar aqui.',
   'Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.': 'Os preços do banco são dinâmicos e estão sujeitos a direitos de autor: esta aplicação não os reproduz, apenas multiplica o valor que o estudante aqui regista. Estimativa pedagógica — não substitui um orçamento.',
   'Floor over unheated space / outside air': 'Pavimento sobre espaço não útil / ar exterior',
   'Ground floor': 'Pavimento térreo',
