@@ -1,0 +1,32 @@
+name: Link check
+# Once a month, and on demand: every supplier, Gerador de Preços, source and
+# photo-credit link in the app is requested; dead ones open (or update) one
+# issue, so a broken link is found by the author before a student meets it.
+on:
+  schedule:
+    - cron: '17 6 1 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check links
+        id: check
+        continue-on-error: true
+        run: node .github/scripts/check-links.mjs
+      - name: Report dead links in an issue
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh issue list --state open --label link-check --json number --jq '.[0].number')
+          gh label create link-check --color B60205 --description 'Monthly link check' 2>/dev/null || true
+          if [ -n "$n" ]; then gh issue edit "$n" --body-file link-report.md; gh issue comment "$n" --body "Checked again: see the updated list above."
+          else gh issue create --title 'Broken links (monthly check)' --label link-check --body-file link-report.md; fi
