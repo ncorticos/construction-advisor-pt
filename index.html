@@ -135,7 +135,7 @@ select,input[type=number]{
 select:focus,input:focus{outline:2px solid #cfd8ea; outline-offset:0; border-color:var(--c1)}
 input[type=range]{width:120px; accent-color:var(--ink)}
 .chk{display:inline-flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; color:var(--ink2)}
-.chk input{accent-color:var(--ink); margin:0}
+.chk input{accent-color:var(--ink); margin:0; width:16px; height:16px}
 .chk canvas.dev{width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:9px;background:#fff}
 .exportmenu{position:absolute;z-index:90;min-width:280px;max-width:320px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:6px}
 .exportitem{display:block;width:100%;text-align:left;background:none;border:none;border-radius:7px;padding:8px 10px;cursor:pointer;font:inherit;color:var(--ink)}
@@ -382,7 +382,8 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 @media(max-width:760px){.layer{grid-template-columns:1fr 1fr; gap:6px}}
 .layer select,.layer input{font:inherit; font-size:12px; padding:5px 7px; border:1px solid var(--line2); border-radius:6px; background:var(--bg); color:var(--ink); width:100%}
 .layer .r{font-family:var(--mono); font-size:11.5px; color:var(--muted); text-align:right}
-.layer .x{border:none; background:none; color:var(--faint); cursor:pointer; font-size:15px; line-height:1; padding:2px}
+.layer .x{border:none; background:none; color:var(--faint); cursor:pointer; font-size:15px; line-height:1; padding:2px;
+  min-width:24px; min-height:24px}   /* v2.54.0: WCAG 2.2 target size */
 .layer .x:hover{color:var(--c2)}
 .layer.air{background:var(--wash)}
 /* The running total of an assembly. */
@@ -458,6 +459,13 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
   border-radius:20px; padding:1px 9px; margin:1px 4px 1px 0; color:var(--ink2); background:var(--wash)}
 .mcard .mname{font-size:12.5px; font-weight:600; line-height:1.35}
 .mcard .msub{font-family:var(--mono); font-size:10.5px; color:var(--muted)}
+/* v2.54.0: on a phone a wide table scrolls inside its own box and a long
+   dropdown fits the screen, instead of pushing the page sideways */
+@media(max-width:700px){
+  .page table{display:block; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .page select{max-width:100% !important; min-width:0}
+  .page .ctl{flex-wrap:wrap; min-width:0}
+}
 </style>
 </head>
 
@@ -1222,8 +1230,12 @@ function statCard(k, v, unit, sub) {
     sub ? el('div', { class:'s', text:sub }) : null
   ]);
 }
+/* v2.54.0: every control's label names its input (for/id), so a screen
+   reader announces what it sets; a segmented group carries its label too. */
+let CTL_SEQ = 0;
+const ctlId = () => 'ctl' + (++CTL_SEQ);
 function selectCtl(labelText, options, value, onchange, width) {
-  const s = el('select', { onchange: e => onchange(e.target.value) });
+  const s = el('select', { id:ctlId(), onchange: e => onchange(e.target.value) });
   for (const o of options) {
     if (o.group) {
       const g = el('optgroup', { label:t(o.group) });
@@ -1236,12 +1248,12 @@ function selectCtl(labelText, options, value, onchange, width) {
      its own option text needs the room, so max-width has to move with it or
      the request is silently clamped back down. */
   if (width) { s.style.width = width + 'px'; s.style.maxWidth = width + 'px'; }
-  const wrap = el('div', { class:'ctl' }, [ labelText ? el('label', { text:labelText }) : null, s ]);
+  const wrap = el('div', { class:'ctl' }, [ labelText ? el('label', { text:labelText, for:s.id }) : null, s ]);
   wrap.select = s;                       // so callers can reset the value programmatically
   return wrap;
 }
 function segCtl(labelText, options, value, onchange) {
-  const box = el('div', { class:'seg' });
+  const box = el('div', { class:'seg', role:'group', 'aria-label':labelText ? t(labelText) : null });
   const btns = options.map(o => {
     const b = el('button', { text:o.label, 'aria-pressed': o.value === value ? 'true' : 'false', title:o.title || '',
       onclick: () => { btns.forEach(x => x.setAttribute('aria-pressed', 'false')); b.setAttribute('aria-pressed', 'true'); onchange(o.value); } });
@@ -1257,9 +1269,9 @@ function checkCtl(labelText, checked, onchange) {
 function rangeCtl(labelText, min, max, step, value, onchange, fmtFn) {
   const out = el('span', { class:'tv', text: fmtFn ? fmtFn(value) : String(value) });
   out.style.fontFamily = MONO; out.style.fontSize = '11px'; out.style.minWidth = '38px';
-  const r = el('input', { type:'range', min, max, step, value,
+  const r = el('input', { type:'range', id:ctlId(), min, max, step, value,
     oninput: e => { const v = +e.target.value; out.textContent = fmtFn ? fmtFn(v) : String(v); onchange(v); } });
-  const wrap = el('div', { class:'ctl' }, [ el('label', { text:labelText }), r, out ]);
+  const wrap = el('div', { class:'ctl' }, [ el('label', { text:labelText, for:r.id }), r, out ]);
   wrap.range = r; wrap.out = out;        // so callers can reset the value programmatically
   return wrap;
 }
@@ -2698,7 +2710,7 @@ const slugify = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 /** A number field, for a value the student wants to type rather than drag. */
 function numCtl(labelText, min, max, step, value, onchange, unit) {
-  const inp = el('input', { type:'number', min:min, max:max, step:step, value:value,
+  const inp = el('input', { type:'number', id:ctlId(), min:min, max:max, step:step, value:value,
     onchange: e => {
       let v = +e.target.value;
       if (!isFinite(v)) v = value;
@@ -2708,7 +2720,7 @@ function numCtl(labelText, min, max, step, value, onchange, unit) {
     } });
   inp.style.width = '92px';
   const wrap = el('div', { class:'ctl' }, [
-    el('label', { text:labelText }), inp,
+    el('label', { text:labelText, for:inp.id }), inp,
     unit ? el('span', { text:unit, style:'font-size:11px;color:var(--muted)' }) : null ]);
   wrap.input = inp;
   return wrap;
@@ -3076,7 +3088,7 @@ function assemblyEditor(host, spec) {
       const M = L.air ? null : MAT[L.key];
       const fixed = M && M.r !== undefined;
       const part = A.parts[i];
-      const sel = el('select', { onchange: e => {
+      const sel = el('select', { 'aria-label':t('Material of layer') + ' ' + (i + 1), onchange: e => {
         const v = e.target.value;
         if (v === '_air') { S.layers[i] = { air:1, d: L.d || 0.03 }; }
         else {
@@ -4540,7 +4552,7 @@ function buildIAQ(host) {
         checkCtl(t('Within 5 km of the coast'), V.coastal, v => { V.coastal = v; rerender(); }),
         selectCtl(t('Roughness'), IAQ_ROUGHNESS.map(r => ({ value:r.key, label:t(r.name) })), V.rough,
           v => { V.rough = v; rerender(); }, 520),
-        el('div', { style:'display:flex;align-items:center;gap:10px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:#e9edf1;color:var(--ink2);font-size:12.5px;white-space:nowrap' }, [
+        el('div', { style:'display:flex;align-items:center;gap:10px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:#e9edf1;color:var(--ink2);font-size:12.5px;flex-wrap:wrap;max-width:100%' }, [
           el('b', { text:'Façade protection' }),
           el('span', { text:IAQ_PROTECTION.find(p => p.key === V.protection).name }),
           el('span', { style:'opacity:.65', text:'— from D obs ÷ H obs' }) ])
@@ -7043,8 +7055,8 @@ function costPanel(host, cfg) {
     const grid = el('div', { class:'costgrid' });
     const mkNum = (lab, val, ph, cb) => {
       const wrap = el('div');
-      wrap.appendChild(el('label', { text:lab }));
-      const inp = el('input', { type:'number', min:'0', step:'0.01', placeholder:ph });
+      const inp = el('input', { type:'number', id:ctlId(), min:'0', step:'0.01', placeholder:ph });
+      wrap.appendChild(el('label', { text:lab, for:inp.id }));
       if (val !== null && val !== '' && val !== undefined) inp.value = val;
       inp.addEventListener('input', () => {
         const v = inp.value === '' ? null : Math.max(0, +inp.value);
@@ -9718,6 +9730,22 @@ Object.assign(PT, {
   'Overall budget': 'Orçamento global',
   'Visiting each tab refreshes this total.': 'A visitar cada separador actualiza este total.',
   'Reference price at': 'Preço de referência em',
+  'Curtains and awnings': 'Cortinas e toldos',
+  'Venetian blind': 'Estore veneziano',
+  'Roller shutter, timber slats': 'Persiana de enrolar, lâminas de madeira',
+  'Roller shutter, metal slats': 'Persiana de enrolar, lâminas metálicas',
+  'Roller shutter, plastic slats filled with insulation': 'Persiana de enrolar, lâminas plásticas com enchimento isolante',
+  'Roller shutter, plastic slats, unfilled': 'Persiana de enrolar, lâminas plásticas sem enchimento',
+  'Shutter, slatted': 'Portada de lâminas',
+  'Solid timber shutter, other thicknesses': 'Portada opaca de madeira, outras espessuras',
+  'Solid timber shutter, {} to {} mm': 'Portada opaca de madeira, {} a {} mm',
+  'Solid plastic shutter, filled with insulation': 'Portada opaca de plástico, com enchimento isolante',
+  'Solid plastic shutter, unfilled': 'Portada opaca de plástico, sem enchimento',
+  'Solid metal shutter': 'Portada opaca metálica',
+  'Window area': 'Área do vão',
+  'Material of layer': 'Material da camada',
+  'Manual SCE §{}, Tabelas {} and {}': 'Manual SCE §{}, Tabelas {} e {}',
+  'Open the source this is drawn from': 'Abrir a fonte de onde isto é tirado',
   'Your last assessment': 'A sua última avaliação',
   'Your last assessment is kept in this browser': 'A sua última avaliação está guardada neste navegador',
   'Restore it': 'Retomá-la',
