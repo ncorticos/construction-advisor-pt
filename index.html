@@ -431,6 +431,9 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photocredit a{color:var(--muted)}
 /* --- v2.7.0: photo editor ---------------------------------------------- */
 .photoedit-toggle{margin-left:auto}
+.restorebar{display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; border:1px solid var(--c1); border-radius:10px;
+  padding:10px 12px; margin:0 0 14px; background:var(--wash); font-size:13px}
+.restorebar span{flex:1 1 260px}
 .photobar{border:1px dashed var(--c1); border-radius:10px; padding:10px 12px; margin:12px 0 4px; background:var(--wash)}
 .photobar-head{font-size:12.5px; color:var(--ink2)}
 .photobar-n{font-family:var(--mono); font-size:11px; color:var(--c1)}
@@ -763,6 +766,7 @@ function checkpoint() {
     }
     UNDO.prev = s; UNDO.t = now;
     undoRefreshBtn();
+    autosaveSoon();
   } catch (e) {}
 }
 function undoReset() {
@@ -5638,6 +5642,46 @@ function collectSession() {
            site: JSON.parse(JSON.stringify(STATE.site)), tab: STATE.tab, state };
 }
 
+/* v2.54.0: the assessment keeps a copy of itself in this browser — after
+   every settled change and whenever the page is hidden or closed — so a
+   reload or a closed tab no longer costs the student the work. The next
+   visit offers it back. Save still writes the file that travels between
+   computers; this copy never leaves the browser. */
+const SESSION_KEY = 'cona-session';
+let autosaveT = null;
+function autosaveNow() {
+  clearTimeout(autosaveT); autosaveT = null;
+  if (!STATE.site) return;
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(collectSession())); } catch (e) {}
+}
+function autosaveSoon() { clearTimeout(autosaveT); autosaveT = setTimeout(autosaveNow, 600); }
+function storedSession() {
+  try { const o = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); return o && o.site && o.state ? o : null; }
+  catch (e) { return null; }
+}
+function forgetStoredSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+window.addEventListener('pagehide', autosaveNow);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autosaveNow(); });
+/** On the setup screen: the last assessment kept in this browser, offered
+    back with its place and time — Restore reopens it, Discard forgets it. */
+function offerStoredSession() {
+  const o = storedSession(), host = $('#setup');
+  const old = $('#restoreBar'); if (old) old.remove();
+  if (!o || !host || STATE.site) return;
+  const when = o.savedAt ? new Date(o.savedAt) : null;
+  const place = o.site.conc || o.site.nuts || '';
+  const bar = el('div', { class:'restorebar', id:'restoreBar', role:'region', 'aria-label':t('Your last assessment') });
+  bar.appendChild(el('span', { html:'<b>' + t('Your last assessment is kept in this browser') + '</b> — ' + escHtml(place)
+    + (when && !isNaN(when) ? ' · ' + when.toLocaleString(LANG === 'pt' ? 'pt-PT' : 'en-GB', { dateStyle:'medium', timeStyle:'short' }) : '') }));
+  bar.appendChild(el('button', { class:'btn solid', type:'button', text:t('Restore it'), onclick:() => {
+    const r = applySession(o);
+    if (r === 'ok' || r === 'ok-aa') { undoReset(); toast(t('Assessment restored')); }
+    else { toast(t('That copy could not be read')); forgetStoredSession(); bar.remove(); }
+  } }));
+  bar.appendChild(el('button', { class:'btn', type:'button', text:t('Discard'), onclick:() => { forgetStoredSession(); bar.remove(); } }));
+  host.insertBefore(bar, host.firstChild);
+}
+
 /* ==================== PowerPoint report export (v2.32.0) ====================
    Self-contained .pptx writer (stored zip, no dependency) + a report of every
    selection in the current assessment, styled like the course slides: dark
@@ -6739,6 +6783,7 @@ function loadSessionFile(file) {
 }
 
 function restartAssessment() {
+  forgetStoredSession();
   resetAllState();
   STATE.site = null;
   STATE.tab = null;
@@ -8666,6 +8711,7 @@ function mountApp(site, keepTab) {
 
   function activate(key) {
     STATE.tab = key;
+    autosaveSoon();
     TABS.forEach(tab => {
       const on = tab.key === key;
       $('#tab-' + tab.key).setAttribute('aria-selected', on ? 'true' : 'false');
@@ -8714,6 +8760,7 @@ function setLanguage(lang) {
   document.title = STATE.site ? APP.tabName + ' — ' + (STATE.site.conc || STATE.site.nuts)
     : APP.tabName + (LANG === 'pt' ? ' — Envolvente e Orçamento SCE' : ' — SCE Envelope + Budget');
   if (STATE.site) mountApp(STATE.site, STATE.tab);      // rebuild every page in the new language
+  else if ($('#restoreBar')) offerStoredSession();      // the restore offer, in the new language
 }
 $$('#langsel button').forEach(b => b.addEventListener('click', () => setLanguage(b.dataset.lang)));
 
@@ -8758,24 +8805,29 @@ initSetup();
         toast('That file is missing information this needs');
       }
     }
+  if (!pickupStoredHandoff()) offerStoredSession();
+  });
+  function pickupStoredHandoff() {
   let raw = null;
-  try { raw = localStorage.getItem(AA_HANDOFF_KEY); } catch (e) { return; }
-  if (!raw) return;
+  try { raw = localStorage.getItem(AA_HANDOFF_KEY); } catch (e) { return false; }
+  if (!raw) return false;
   let o = null;
-  try { o = JSON.parse(raw); } catch (e) { return; }
-  if (!o || o.kind !== 'architecture-advisor-handoff' || !o.payload) return;
+  try { o = JSON.parse(raw); } catch (e) { return false; }
+  if (!o || o.kind !== 'architecture-advisor-handoff' || !o.payload) return false;
   const age = o.savedAt ? (Date.now() - new Date(o.savedAt).getTime()) : Infinity;
   if (!(age >= 0) || age > 30 * 24 * 3600 * 1000) {
     try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
-    return;
+    return false;
   }
   const r = applySession(o.payload);
   if (r === 'ok-aa') {
     try { localStorage.removeItem(AA_HANDOFF_KEY); } catch (e) {}
     undoReset();
     toast('Study imported from Architecture Advisor');
+    return true;
   }
-  });
+  return false;
+  }
 })();
 
 /* ==================================== 8. EUROPEAN PORTUGUESE ==
@@ -9643,6 +9695,12 @@ Object.assign(PT, {
   'Overall budget': 'Orçamento global',
   'Visiting each tab refreshes this total.': 'A visitar cada separador actualiza este total.',
   'Reference price at': 'Preço de referência em',
+  'Your last assessment': 'A sua última avaliação',
+  'Your last assessment is kept in this browser': 'A sua última avaliação está guardada neste navegador',
+  'Restore it': 'Retomá-la',
+  'Discard': 'Descartar',
+  'Assessment restored': 'Avaliação retomada',
+  'That copy could not be read': 'Não foi possível ler essa cópia',
   'Add, for the same m²:': 'Somar, para o mesmo m²:',
   'Alternatives for the same frame family:': 'Alternativas para a mesma família de caixilho:',
   'Page moved? Browse the chapter:': 'Página mudou de endereço? Percorrer o capítulo:',
