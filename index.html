@@ -279,6 +279,7 @@ abbr.gl:focus{box-shadow:0 0 0 2px #cfd8ea}
 /* ---------- Footer ---------- */
 footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)}
 .foot{max-width:1680px; margin:0 auto; padding:30px 24px 40px}
+.lawasof{font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.45}
 .foot-top{display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:34px; align-items:start}
 @media(max-width:820px){.foot-top{grid-template-columns:1fr; gap:24px}}
 .foot h5{
@@ -604,6 +605,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
         <h5 data-t="footLaw">Legislation in force</h5>
         <p><a href="https://www.sce.pt/legislacao/" target="_blank" rel="noopener noreferrer">sce.pt/legislacao</a><br>
            <span style="color:var(--muted)" data-t="footLawSub">The consolidated texts, as published by the ADENE</span></p>
+        <p class="lawasof" data-t="footLawAsOf">Carried here: Decreto-Lei n.º 101-D/2020 as amended by Decreto-Lei n.º 11/2025 (19 February 2025), Portaria n.º 138-I/2021 and the Manual SCE. Last search for later amendments: 21 October 2026 — none found. Directive (EU) 2024/1275 was due in national law by 29 May 2026: confirm at sce.pt before relying on a limit.</p>
         <h5 style="margin-top:14px" data-t="footPriv">Privacy</h5>
         <p style="color:var(--muted)" data-t="footPrivBody">No site data leaves the browser. Nothing is uploaded.</p>
       </div>
@@ -8323,13 +8325,14 @@ function buildSuppliers(host) {
       statCard(t('Materials covered'), Object.keys(covered).length + ' / 33', null, t('Of the library'))
     ]));
     frag.appendChild(hint('sup-dir',
-      'A directory, not a marketplace: every entry below was verified — producers make, distributors stock. Anything without a verified entry is listed at the foot as missing instead of being invented. Confirm dealers near the site before specifying.'));
+      'A directory, not a marketplace: every entry below was verified — producers make, distributors stock. Anything without a verified entry is listed at the foot as missing instead of being invented. Each entry shows the month it was last verified by hand, where recorded; every link is also checked automatically once a month. Confirm dealers near the site before specifying.'));
 
     list.forEach(s => {
       const card = el('div', { class:'costbox' });
       card.appendChild(el('div', { class:'limitrow' }, [
         el('span', { html:'<b><a href="' + s.u + '" target="_blank" rel="noopener noreferrer">' + s.n + '</a></b>' }),
-        el('span', { text:(s.l ? s.l + ' · ' : '') + t(KIND_LABEL[s.k] || s.k) })
+        el('span', { text:(s.l ? s.l + ' · ' : '') + t(KIND_LABEL[s.k] || s.k)
+          + (s.v ? ' · ' + t('verified') + ' ' + s.v : '') })
       ]));
       card.appendChild(el('div', { style:'margin:6px 0 2px' },
         s.mats.map(k => el('span', { class:'zonepill', text:supMatName(k) }))));
@@ -8342,9 +8345,9 @@ function buildSuppliers(host) {
     frag.appendChild(section(t('The directory as a table'),
       t('Company, region, products and websites for every entry'),
       'fornecedores-diretorio', () => csvRows(
-        [[t('Company'), t('Region'), t('Products'), t('Website')]]
+        [[t('Company'), t('Region'), t('Products'), t('Website'), t('Verified')]]
         .concat(list.map(s => [s.n, s.r,
-          s.mats.map(k => supMatName(k)).join(' · '), s.u])))));
+          s.mats.map(k => supMatName(k)).join(' · '), s.u, s.v || ''])))));
   });
 }
 
@@ -8926,6 +8929,7 @@ Object.assign(STATIC_PT, {
   footPriv: 'Privacidade',
   footPrivBody: 'Nenhum dado do local sai do navegador. Nada é enviado.',
   footMethods: 'Métodos e fontes',
+  footLawAsOf: 'Aqui considerados: Decreto-Lei n.º 101-D/2020 na redacção do Decreto-Lei n.º 11/2025 (19 de Fevereiro de 2025), Portaria n.º 138-I/2021 e Manual SCE. Última pesquisa de alterações posteriores: 21 de Outubro de 2026 — nenhuma encontrada. A Directiva (UE) 2024/1275 devia estar transposta até 29 de Maio de 2026: confirme em sce.pt antes de confiar num limite.',
   footLegal: '© 2026 <a href="https://ncorticos.github.io/professor-nuno-corticos/" target="_blank" rel="noopener noreferrer">Nuno Dinis Cortiços</a>. Este é um instrumento pedagógico. Reproduz valores tabelados do Manual SCE e da Portaria em vigor para que um estudante possa ver de onde vem um limite, mas não é um motor de cálculo certificado nem produz um pré-certificado. Nenhum valor aqui apresentado deve ser inscrito num processo de conformidade sem ser confrontado com o texto publicado e verificado por um perito qualificado do SCE.'
 });
 
@@ -9743,6 +9747,8 @@ Object.assign(PT, {
   'Solid plastic shutter, unfilled': 'Portada opaca de plástico, sem enchimento',
   'Solid metal shutter': 'Portada opaca metálica',
   'Window area': 'Área do vão',
+  'verified': 'verificado',
+  'Verified': 'Verificado',
   'Material of layer': 'Material da camada',
   'Manual SCE §{}, Tabelas {} and {}': 'Manual SCE §{}, Tabelas {} e {}',
   'Open the source this is drawn from': 'Abrir a fonte de onde isto é tirado',
@@ -9912,7 +9918,7 @@ Object.assign(PT, {
   'No verified supplier in this region for:': 'Sem fornecedor verificado nesta região para:'
 });
 PT_HINT['sup-dir'] =
-  'Um diretório, não um mercado: cada entrada abaixo foi verificada — produtores fabricam, distribuidores armazenam. Tudo o que não tenha entrada verificada é listado no fim como em falta em vez de ser inventado. Confirmar distribuidores junto ao local antes de especificar.';
+  'Um diretório, não um mercado: cada entrada abaixo foi verificada — produtores fabricam, distribuidores armazenam. Tudo o que não tenha entrada verificada é listado no fim como em falta em vez de ser inventado. Cada entrada mostra o mês da última verificação manual, quando registado; todas as ligações são também verificadas automaticamente uma vez por mês. Confirmar distribuidores junto ao local antes de especificar.';
 
 Object.assign(PT_HINT, {
   'shd2-rule': 'Os dispositivos contam-se de fora para dentro até ao primeiro opaco, inclusive — tudo atrás dele está em sombra e nada acrescenta (Manual SCE Eq. 21 a 23). A coluna segue a cor dos dispositivos, nas mesmas três bandas da Tabela 20; um dispositivo exterior ganha sempre a um interior porque o vidro trava luz mas só o que está fora do vidro trava calor antes de ele chegar.'
