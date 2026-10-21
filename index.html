@@ -433,6 +433,8 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photocredit a{color:var(--muted)}
 /* --- v2.7.0: photo editor ---------------------------------------------- */
 .photoedit-toggle{margin-left:auto}
+.udbox{border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
+.udout{font-family:var(--mono, monospace); font-size:12.5px}
 .restorebar{display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; border:1px solid var(--c1); border-radius:10px;
   padding:10px 12px; margin:0 0 14px; background:var(--wash); font-size:13px}
 .restorebar span{flex:1 1 260px}
@@ -6417,7 +6419,7 @@ function exportPptx(format) {
       const my = 1.9 + mhs.reduce((a, b) => a + b, 0);
       S2.push(head(t('Materials selected'), t('Every material chosen in the assemblies, and the budget idea'), Z.wz + ' ' + Z.sz).concat(mshapes.concat([
         R.shape({ x:0.6, y:my + 0.1, w:12.13, h:0.6, paras:[{ runs:[
-          { t:idea + '   ·   ' + t('Overall budget') + ': ' + euro(live.sum), sz:12 }] }] })
+          { t:idea + '   ·   ' + t('Overall budget') + ': ' + euro(live.grand), sz:12 }] }] })
       ])));
     }
     // ---- 4. roofs ----
@@ -6574,8 +6576,11 @@ function exportPptx(format) {
             { t:s.area === null || s.area === undefined ? '—' : fmt(s.area, 1) },
             { t:s.price === null || s.price === undefined ? '—' : euro(s.price) },
             { t:s.total === null || s.total === undefined ? '—' : euro(s.total) }];
-        })) }),
-        metric(0.6, 5.0, 5.0, fmt(live.sum, 2) + ' €', t('Overall budget'))
+        }).concat((live.cont || live.vat) ? [
+          [{ t:t('Works'), b:1 }, { t:'' }, { t:'' }, { t:euro(live.sum), b:1 }],
+          [{ t:t('Contingency') + ' ' + fmt(live.cont, 0) + ' %' }, { t:'' }, { t:'' }, { t:euro(live.contAmt) }],
+          [{ t:t('IVA') + ' ' + fmt(live.vat, 0) + ' %' }, { t:'' }, { t:'' }, { t:euro(live.vatAmt) }]] : [])) }),
+        metric(9.9, 1.9, 2.83, fmt(live.grand, 2) + ' €', t('Overall budget'))
       ]));
     }
     // ---- 11. closing ----
@@ -6758,9 +6763,11 @@ function applySession(data) {
      before any total reads a missing key. */
   BUDGET_ORDER.forEach(k => {
     const s = BUDGET_STATE[k] || {};
-    BUDGET_STATE[k] = { area: (s.area === undefined || s.area === '' ? null : s.area),
-                        price: (s.price === undefined || s.price === '' ? null : s.price) };
+    BUDGET_STATE[k] = Object.assign({}, s, { area: (s.area === undefined || s.area === '' ? null : s.area),
+                        price: (s.price === undefined || s.price === '' ? null : s.price) });
   });
+  BUDGET_STATE.opts = Object.assign({ cont:0, vat:0 }, BUDGET_STATE.opts);
+  if (!BUDGET_STATE.win.ud) BUDGET_STATE.win.ud = { p:null, w:null, h:null };
   const aa = aaApplyMeta(data);
   if (data.meta && data.meta.study && typeof data.meta.study === 'object') AA_STATE.study = data.meta.study;
   /* An imported study carries exact coordinates in meta.site — the setup
@@ -6874,7 +6881,10 @@ const BUDGET_STATE = {
   ground: { area:null, price:null },
   wext:   { area:null, price:null },
   wint:   { area:null, price:null },
-  win:    { area:null, price:null }
+  win:    { area:null, price:null, ud:{ p:null, w:null, h:null } },
+  /* v2.54.0: what the bank's prices leave out — a contingency share and the
+     IVA, both as % and both 0 until the student sets them */
+  opts:   { cont:0, vat:0 }
 };
 const BUDGET_ORDER = ['roof','pav','ground','wext','wint','win'];
 const BUDGET_PT_NAME = {
@@ -6906,7 +6916,11 @@ function budgetTotals() {
     per[k] = { area:a, price:p, total:tot };
     if (tot !== null) { sum += tot; n++; }
   });
-  return { per, sum, n };
+  /* contingency on the works, IVA on works + contingency */
+  const o = BUDGET_STATE.opts || {}, pc = v => clamp(isFinite(+v) ? +v : 0, 0, 100);
+  const cont = pc(o.cont), vat = pc(o.vat);
+  const contAmt = sum * cont / 100, vatAmt = (sum + contAmt) * vat / 100;
+  return { per, sum, n, cont, vat, contAmt, vatAmt, grand:sum + contAmt + vatAmt };
 }
 /* Closest Gerador unit for an element, read off the student's own assembly
    so the button lands on a unit page, not on a chapter index. Each URL is a
@@ -7029,7 +7043,8 @@ function costPanel(host, cfg) {
   const S = BUDGET_STATE[cfg.key];
   const box = el('div');
   host.appendChild(box);
-  COST_LIVE.push({ box:box, render:() => render() });
+  const live = { box:box, render:() => render(), refresh:null };
+  COST_LIVE.push(live);
   const aEsc = u => u.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   const aTag = (u, lab) => '<a href="' + aEsc(u) + '" target="_blank" rel="noopener noreferrer">' + lab + '</a>';
   function render() {
@@ -7040,8 +7055,6 @@ function costPanel(host, cfg) {
       + (near.note ? ' ' + t(near.note) : '')
       + (near.link ? ' ' + t('Page moved? Browse the chapter:') + ' ' + aTag(cfg.link, cfg.linkLabel) + '.' : '');
     box.innerHTML = '';
-    const B = budgetTotals();
-    const mine = B.per[cfg.key];
     box.appendChild(section(t('Cost and quantities — Gerador de Preços'),
       t('Work unit per m²: area × unit price read from the price bank'),
       'custo-' + cfg.key, () => {
@@ -7052,19 +7065,26 @@ function costPanel(host, cfg) {
             live.per[k].area === null ? '' : +live.per[k].area,
             live.per[k].price === null ? '' : +live.per[k].price,
             live.per[k].total === null ? '' : live.per[k].total.toFixed(2)]))
-          .concat([[t(live.n + ' of ' + BUDGET_ORDER.length + ' priced items'), '', '', live.sum.toFixed(2)]]));
+          .concat([[t(live.n + ' of ' + BUDGET_ORDER.length + ' priced items'), '', '', live.sum.toFixed(2)],
+            [t('Contingency') + ' (' + live.cont + ' %)', '', '', live.contAmt.toFixed(2)],
+            [t('IVA') + ' (' + live.vat + ' %)', '', '', live.vatAmt.toFixed(2)],
+            [t('Overall budget'), '', '', live.grand.toFixed(2)]]));
       }));
+    /* v2.54.0: typing updates the figures, not the fields — the panel used
+       to rebuild itself on every keystroke and drop the cursor after the
+       first digit. */
     const grid = el('div', { class:'costgrid' });
-    const mkNum = (lab, val, ph, cb) => {
+    const mkNum = (lab, val, ph, cb, step) => {
       const wrap = el('div');
-      const inp = el('input', { type:'number', id:ctlId(), min:'0', step:'0.01', placeholder:ph });
+      const inp = el('input', { type:'number', id:ctlId(), min:'0', step:step || '0.01', placeholder:ph });
       wrap.appendChild(el('label', { text:lab, for:inp.id }));
       if (val !== null && val !== '' && val !== undefined) inp.value = val;
       inp.addEventListener('input', () => {
         const v = inp.value === '' ? null : Math.max(0, +inp.value);
-        cb(v); render();
+        cb(v); refresh();
       });
       wrap.appendChild(inp);
+      wrap.input = inp;
       return wrap;
     };
     const areaWrap = mkNum(t('Element area'), S.area, t('m² — e.g. 120'),
@@ -7073,29 +7093,75 @@ function costPanel(host, cfg) {
       areaWrap.appendChild(el('div', { class:'sub',
         text:t('Area measured in the Architecture Advisor — overwrite as needed') }));
     grid.appendChild(areaWrap);
-    grid.appendChild(mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; }));
+    const priceWrap = mkNum(t('Unit price'), S.price, t('€/m² — read from the Gerador'), v => { S.price = v; });
+    grid.appendChild(priceWrap);
     grid.appendChild(el('div', null, [
-      el('label', { text:' ' }),
+      el('label', { text:' ' }),
       el('a', { class:'btn', href:blink, target:'_blank', rel:'noopener noreferrer',
         style:'display:block;text-align:center;text-decoration:none;padding:6px 9px',
         text:t('Open the Gerador') + ' — ' + blabel })
     ]));
+    /* windows: the bank prices one opening (Ud); width × height turns it into €/m² */
+    let udOut = null;
+    const udBox = cfg.key === 'win' ? (() => {
+      const U = S.ud || (S.ud = { p:null, w:null, h:null });
+      const g = el('div', { class:'costgrid' });
+      g.appendChild(mkNum(t('Price of one window (Ud)'), U.p, t('€ — read from the Gerador'), v => { U.p = v; }));
+      g.appendChild(mkNum(t('Its width'), U.w, t('m — from the unit description'), v => { U.w = v; }, '0.05'));
+      g.appendChild(mkNum(t('Its height'), U.h, t('m — from the unit description'), v => { U.h = v; }, '0.05'));
+      udOut = el('span', { class:'udout' });
+      const use = el('button', { class:'btn small', type:'button', text:t('Use as unit price'), onclick:() => {
+        const r = udRate();
+        if (r === null) { toast(t('Fill in the price, width and height of one window first')); return; }
+        S.price = Math.round(r * 100) / 100; priceWrap.input.value = S.price; refresh();
+      } });
+      return el('div', { class:'udbox' }, [el('div', { class:'sub', text:t('Window price per opening → €/m²') }), g, el('div', { class:'limitrow' }, [udOut, use])]);
+    })() : null;
+    const udRate = () => { const U = S.ud || {}; return (U.p > 0 && U.w > 0 && U.h > 0) ? U.p / (U.w * U.h) : null; };
+    /* what the bank leaves out: contingency on the works, IVA on top — one
+       setting for the whole budget, shown on every element's panel */
+    const O = BUDGET_STATE.opts || (BUDGET_STATE.opts = { cont:0, vat:0 });
+    const optGrid = el('div', { class:'costgrid' });
+    const contW = mkNum(t('Contingency (%)'), O.cont || null, t('% of the works — e.g. 5'), v => { O.cont = v === null ? 0 : Math.min(100, v); }, '1');
+    const vatW = mkNum(t('IVA (%)'), O.vat || null, t('% — 0 to leave it out'), v => { O.vat = v === null ? 0 : Math.min(100, v); }, '1');
+    optGrid.appendChild(contW); optGrid.appendChild(vatW);
+    const totBox = el('div');
+    /* the other panels on screen follow at once — the overall budget and the
+       shared contingency and IVA fields — without touching a field in use */
+    live.refresh = () => {
+      [[contW.input, O.cont], [vatW.input, O.vat]].forEach(([i, v]) => { if (document.activeElement !== i) i.value = v ? v : ''; });
+      refresh(true);
+    };
+    function refresh(quiet) {
+      if (!quiet) COST_LIVE.forEach(o => { if (o !== live && o.refresh && o.box.isConnected) o.refresh(); });
+      const B = budgetTotals(), mine = B.per[cfg.key];
+      totBox.innerHTML = '';
+      totBox.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html:'<b>' + m2fmt(mine.area) + '</b> × <b>' + euro(mine.price).replace(' €','') + ' €/m²</b>' }),
+        el('span', { html:t('Element total:') + ' <b>' + (mine.total === null ? '—' : euro(mine.total)) + '</b>' })
+      ]));
+      const extraLines = (B.cont ? ' · ' + t('contingency') + ' ' + fmt(B.cont, 0) + ' % ' + euro(B.contAmt) : '')
+        + (B.vat ? ' · ' + t('IVA') + ' ' + fmt(B.vat, 0) + ' % ' + euro(B.vatAmt) : '');
+      totBox.appendChild(el('div', { class:'ctotal' }, [
+        el('span', { html:t('Works') + ' (' + t(B.n + ' of ' + BUDGET_ORDER.length + ' priced items') + '): ' + euro(B.sum) + extraLines
+          + ' — ' + t('Overall budget') + ': <b>' + euro(B.grand) + '</b>' }),
+        el('span', { html:'<span style="color:var(--muted)">' + t('Visiting each tab refreshes this total.') + '</span>' })
+      ]));
+      if (udOut) { const r = udRate(); udOut.innerHTML = r === null ? t('Fill in the three fields') : '= <b>' + euro(r).replace(' €', '') + ' €/m²</b>'; }
+      if (!quiet) checkpoint();
+    }
     box.appendChild(el('div', { class:'costbox' }, [
-      grid,
+      grid, udBox,
       el('div', null, [
-        el('div', { class:'limitrow' }, [
-          el('span', { html:'<b>' + m2fmt(mine.area) + '</b> × <b>' + euro(mine.price).replace(' €','') + ' €/m²</b>' }),
-          el('span', { html:t('Element total:') + ' <b>' + (mine.total === null ? '—' : euro(mine.total)) + '</b>' })
-        ]),
-        el('div', { class:'ctotal' }, [
-          el('span', { html:t('Overall budget') + ' (' + t(B.n + ' of ' + BUDGET_ORDER.length + ' priced items') + '): <b>' + euro(B.sum) + '</b>' }),
-          el('span', { html:'<span style="color:var(--muted)">' + t('Visiting each tab refreshes this total.') + '</span>' })
-        ]),
+        totBox,
+        optGrid,
+        el('p', { class:'costlink', text:t('The Gerador’s prices leave out IVA. Mainland standard rate 23 %; the reduced 6 % applies only to the works the Código do IVA lists for it; Madeira and the Azores apply their own rates — confirm the rate in force. A contingency share covers what a teaching estimate cannot see.') }),
         el('p', { class:'costlink', html:t('Reference price at') + ' ' + aTag(blink, blabel)
           + ' — Gerador de Preços, CYPE.' + extra + ' ' + t(cfg.unitHint || '')
           + ' ' + t('Bank prices are live and copyrighted: this application does not reproduce them, it only multiplies the value the student records here. Teaching estimate — not a substitute for a quotation.') })
       ])
     ]));
+    refresh();
     box.appendChild(hint('custo-' + cfg.key,
       'A <b>unit of work</b> in the Gerador de Preços is a complete system per m² — materials, labour, auxiliary means and overheads already included in the composite price. That is why this panel asks for <b>area × unit price</b> and not the price of each layer: compare solutions that meet the same U here and read, side by side, what each degree of thermal ambition costs. Without a unit price there is no total — the dash is deliberate.'));
   }
@@ -8765,6 +8831,8 @@ function mountApp(site, keepTab) {
         }
       }
     });
+    /* a tab built earlier shows the budget as it stands now */
+    COST_LIVE.forEach(o => { if (o.refresh && o.box.isConnected) o.refresh(); });
     requestAnimationFrame(redrawVisiblePanels);
     setTimeout(redrawVisiblePanels, 150);
     window.scrollTo(0, 0);
@@ -9747,6 +9815,24 @@ Object.assign(PT, {
   'Solid plastic shutter, unfilled': 'Portada opaca de plástico, sem enchimento',
   'Solid metal shutter': 'Portada opaca metálica',
   'Window area': 'Área do vão',
+  'Contingency': 'Imprevistos',
+  'contingency': 'imprevistos',
+  'IVA': 'IVA',
+  'Works': 'Obra',
+  'Contingency (%)': 'Imprevistos (%)',
+  'IVA (%)': 'IVA (%)',
+  '% of the works — e.g. 5': '% da obra — p. ex. 5',
+  '% — 0 to leave it out': '% — 0 para não incluir',
+  'Price of one window (Ud)': 'Preço de um vão (Ud)',
+  'Its width': 'Largura',
+  'Its height': 'Altura',
+  '€ — read from the Gerador': '€ — lido no Gerador',
+  'm — from the unit description': 'm — da descrição da unidade',
+  'Use as unit price': 'Usar como preço unitário',
+  'Fill in the price, width and height of one window first': 'Preencha primeiro o preço, a largura e a altura de um vão',
+  'Window price per opening → €/m²': 'Preço por vão → €/m²',
+  'Fill in the three fields': 'Preencha os três campos',
+  'The Gerador’s prices leave out IVA. Mainland standard rate 23 %; the reduced 6 % applies only to the works the Código do IVA lists for it; Madeira and the Azores apply their own rates — confirm the rate in force. A contingency share covers what a teaching estimate cannot see.': 'Os preços do Gerador não incluem IVA. Taxa normal no continente 23 %; a taxa reduzida de 6 % aplica-se só às obras que o Código do IVA lhe atribui; a Madeira e os Açores têm taxas próprias — confirme a taxa em vigor. Uma parcela de imprevistos cobre o que uma estimativa pedagógica não vê.',
   'verified': 'verificado',
   'Verified': 'Verificado',
   'Material of layer': 'Material da camada',
