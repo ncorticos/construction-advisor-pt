@@ -86,7 +86,7 @@ nav.tabs{border-bottom:1px solid var(--line); background:#fff}
 
 /* ---------- Layout ---------- */
 main{max-width:1680px; margin:0 auto; padding:0 24px 44px}
-section.page{display:none; padding-top:26px}
+section.page{display:none; padding-top:18px}
 section.page.on{display:block}
 .pagehead{margin-bottom:14px; max-width:760px}
 .pagehead h2{font-size:19px; letter-spacing:-0.02em}
@@ -142,6 +142,11 @@ input[type=range]{width:120px; accent-color:var(--ink)}
 .exportitem:hover{background:#eef1f4}
 .exportitem b{display:block;font-size:13px}
 .exportitem span{display:block;font-size:11.5px;color:var(--muted)}
+.exportguide{position:fixed;z-index:95;right:24px;top:96px;width:340px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:14px 16px;font-size:12.5px;color:var(--ink2)}
+.exportguide b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:6px}
+.exportguide ol{margin:6px 0 10px 18px;padding:0}
+.exportguide li{margin:3px 0;line-height:1.45}
+.exportguide .row{display:flex;gap:8px;justify-content:flex-end}
 .seg{display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#fff}
 .seg button{
   font:inherit; font-size:11.5px; padding:4px 10px; border:none; background:#fff;
@@ -228,7 +233,7 @@ abbr.gl:focus{box-shadow:0 0 0 2px #cfd8ea}
 #tip.gloss b{display:block; margin-bottom:3px; color:#fff}
 
 /* ---------- Drop zone ---------- */
-#empty{padding:18px 24px 20px; max-width:1000px; margin:0 auto}
+#empty{padding:18px 0 20px}
 .explain{display:flex; flex-direction:column; gap:16px; margin-top:14px}
 .explain h4{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink)}
 .explain p{font-size:12px; color:var(--muted); margin:5px 0 0; line-height:1.6}
@@ -307,12 +312,17 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
    application knows about a place is entered here: the municipality, which
    fixes the NUTS III, and the altitude, which corrects it. */
 .setup{
-  max-width:860px; margin:0 auto; padding:34px 30px 30px;
-  border:1px solid var(--line); border-radius:14px; background:var(--panel);
-  box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 26px rgba(16,24,40,.05);
+  max-width:980px; margin:0; padding:16px 18px 14px;
+  border:1px solid var(--line); border-radius:9px; background:var(--wash);
 }
 .setup-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px 22px; margin-bottom:20px}
 @media(max-width:700px){.setup-grid{grid-template-columns:1fr}}
+/* v2.51.0: the phone header as the Architecture Advisor keeps it — the
+   name, the site and the language on screen */
+@media(max-width:1100px){.brand span{display:none}}
+@media(max-width:700px){main{padding:0 14px 36px}.hbar{padding:8px 14px; gap:10px}.tabs-inner{padding:0 14px}
+  .brand{flex:0 1 auto; min-width:0}.brand b{font-size:clamp(12px,3.45vw,14px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .filechip .meta,.filechip .loc{display:none}.filechip{gap:8px}.filechip .btn{padding:5px 9px; white-space:nowrap}}
 @media(max-width:420px){.hbar{gap:8px}.filechip .btn{padding:5px 7px}}
 .fld{display:flex; flex-direction:column; gap:5px; min-width:0}
 .fld>label{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
@@ -347,7 +357,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 }
 .combo-menu .opt:hover,.combo-menu .opt.active{background:var(--wash)}
 .combo-menu .empty{padding:10px; font-size:12.5px; color:var(--faint)}
-.setup .cta{display:flex; flex-direction:column; align-items:stretch; gap:8px; margin:14px 0 6px}
+.setup .cta{display:flex; flex-direction:column; align-items:stretch; gap:8px; margin:0 0 6px}
 .setup .cta .zonechip{justify-content:center}
 .setup .cta .btn{padding:10px 14px; font-size:13.5px}
 .setup .cta .btn.solid{padding:14px; font-size:15.5px}
@@ -456,7 +466,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
     <div class="filechip sitechip" id="sitechip">
       <span class="loc" id="chipLoc"></span>
       <span class="meta" id="chipMeta"></span>
-      <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Restart</button>
+      <button class="btn" id="btnRestart" data-t="btnRestart" title="Discard this assessment and start a new one">Change the site</button>
     </div>
     <div class="langsel" id="langsel" role="group" aria-label="Language / Idioma">
       <button type="button" data-lang="en" aria-pressed="true" title="English">EN</button>
@@ -626,7 +636,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.49.0',
+  version:     '2.52.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5579,7 +5589,17 @@ function buildShading(host) {
 const AA_HANDOFF_KEY = 'arca-handoff-construction';
 const AA_ORDER = ['N','NE','E','SE','S','SW','W','NW'];
 const AA_STATE = { present:false, savedAt:null, fromApp:null, fromVer:null,
-  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[] };
+  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[], study:null };
+/* v2.50.0: the way back. The Architecture Advisor study that came with the
+   hand-off is kept (and saved with this assessment), so the student can
+   reopen that same design there; it travels in the address, as it came. */
+const AA_URL = 'https://ncorticos.github.io/architecture-advisor-pt/';
+function backToArchitecture() {
+  const st = AA_STATE.study;
+  const w = window.open(AA_URL + (st ? '#study=' + encodeURIComponent(JSON.stringify(st)) : ''), '_blank');
+  if (!w) toast('The browser blocked the new tab — allow pop-ups for this site');
+  else if (!st) toast('No Architecture Advisor study came with this assessment — it opens at its start');
+}
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
   FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE, AA_STATE
@@ -5645,20 +5665,26 @@ const PPTX = (() => {
     o = o || {};
     return '<a:r><a:rPr lang="en-US" sz="' + Math.round((o.sz || 14) * 100) + '"' +
       (o.b ? ' b="1"' : '') + (o.i ? ' i="1"' : '') +
-      '><a:solidFill><a:srgbClr val="' + (o.color || C.white) + '"/></a:solidFill></a:rPr>' +
+      '><a:solidFill><a:srgbClr val="' + (o.color || C.white) + '"/></a:solidFill>' +
+      '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/></a:rPr>' +
       '<a:t>' + esc(t) + '</a:t></a:r>';
   };
+  /* v2.52.0: written to the schema, so PowerPoint opens it without a
+     repair and Slides, Canva and LibreOffice import it whole: a paragraph
+     always closes on its end properties, a text body always holds one */
   const para = (runs, o) => {
     o = o || {};
+    const rs = runs.filter(r => String(r.t) !== '');
+    const sz = Math.round(((rs[0] && rs[0].sz) || (runs[0] && runs[0].sz) || 14) * 100);
     return '<a:p>' + (o.align ? '<a:pPr algn="' + o.align + '"/>' : '') +
-      runs.filter(r => String(r.t) !== '').map(r => run(r.t, r)).join('') + '</a:p>';
+      rs.map(r => run(r.t, r)).join('') + '<a:endParaRPr lang="en-US" sz="' + sz + '" dirty="0"/></a:p>';
   };
-  const txBody = (paras, o) => {
-    o = o || {};
-    return '<p:txBody><a:bodyPr wrap="square" lIns="91440" rIns="91440" tIns="45720" bIns="45720"' +
-      (o.anchor ? ' anchor="' + o.anchor + '"' : '') + '/><a:lstStyle/>' +
-      paras.map(p => para(p.runs, p)).join('') + '</p:txBody>';
-  };
+  const bodyPr = o => '<a:bodyPr wrap="square" lIns="' + X(o.padL !== undefined ? o.padL : 0.1) + '" rIns="' + X(o.padR !== undefined ? o.padR : 0.1) +
+    '" tIns="' + X(o.padT !== undefined ? o.padT : 0.05) + '" bIns="' + X(o.padB !== undefined ? o.padB : 0.05) + '" rtlCol="0" anchor="' +
+    (o.anchor || 't') + '"><a:noAutofit/></a:bodyPr>';
+  const paras = (ps, tag) => '<' + tag + '>' + '__BP__' + '<a:lstStyle/>' +
+    (ps.length ? ps.map(p => para(p.runs, p)).join('') : '<a:p><a:endParaRPr lang="en-US" dirty="0"/></a:p>') + '</' + tag + '>';
+  const txBody = (ps, o) => paras(ps || [], 'p:txBody').replace('__BP__', bodyPr(o || {}));
   // ---- shapes ----
   const shape = (o) => {
     const id = nid();
@@ -5668,30 +5694,34 @@ const PPTX = (() => {
       '<a:ext cx="' + X(o.w) + '" cy="' + X(o.h) + '"/></a:xfrm>' +
       '<a:prstGeom prst="' + (o.round ? 'roundRect' : 'rect') + '"><a:avLst/></a:prstGeom>' +
       (o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>') +
-      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
+      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '"><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
               : '<a:ln><a:noFill/></a:ln>') +
       '</p:spPr>' + txBody(o.paras || [], o) + '</p:sp>';
   };
+  /* a native table (a:tbl), so every importer keeps it a table: rows take
+     their height (o.rowHs per row, or o.rowH), the head row in the panel
+     colour and amber, the body banded */
   const table = (o) => {
-    const out = [];
-    let y = o.y;
-    o.rows.forEach((row, ri) => {
-      let x = o.x;
-      const rh = o.rowH || 0.34;
-      row.forEach((cell, ci) => {
-        const w = o.colW[ci];
+    const id = nid(), hs = o.rows.map((_, ri) => (o.rowHs ? o.rowHs[ri] : o.rowH) || 0.34);
+    const W = o.colW.reduce((a, b) => a + b, 0), H = hs.reduce((a, b) => a + b, 0);
+    const ln = tag => '<a:' + tag + ' w="6350"><a:solidFill><a:srgbClr val="' + C.line + '"/></a:solidFill></a:' + tag + '>';
+    const rows = o.rows.map((row, ri) => {
+      const idx = (o.r0 || 0) + ri;
+      return '<a:tr h="' + X(hs[ri]) + '">' + row.map((cell, ci) => {
         const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
-        out.push(shape({ x, y, w, h:rh,
-          fill:((o.r0 || 0) + ri) === 0 ? C.panel : (((o.r0 || 0) + ri) % 2 ? '22313B' : C.bg),
-          line:1, lineColor:C.line, lnW:6350,
-          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || ((o.r0 || 0) + ri) === 0,
-            color:cell.color || (((o.r0 || 0) + ri) === 0 ? C.amber : C.white) }], align:al }],
-          anchor:'ctr' }));
-        x += w;
-      });
-      y += rh;
-    });
-    return out.join('');
+        const body = paras([{ runs:[{ t:cell.t, sz:cell.sz || o.sz || 11, b:!!cell.b || idx === 0,
+          color:cell.color || (idx === 0 ? C.amber : C.white) }], align:al }], 'a:txBody').replace('__BP__', '<a:bodyPr/>');
+        return '<a:tc>' + body + '<a:tcPr marL="' + X(0.08) + '" marR="' + X(0.08) + '" marT="' + X(0.03) + '" marB="' + X(0.03) + '" anchor="ctr">' +
+          ln('lnL') + ln('lnR') + ln('lnT') + ln('lnB') +
+          '<a:solidFill><a:srgbClr val="' + (idx === 0 ? C.panel : (idx % 2 ? '22313B' : C.bg)) + '"/></a:solidFill></a:tcPr></a:tc>';
+      }).join('') + '</a:tr>';
+    }).join('');
+    return '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="' + id + '" name="Table ' + id + '"/>' +
+      '<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="' + X(o.x) + '" y="' + X(o.y) + '"/><a:ext cx="' + X(W) + '" cy="' + X(H) + '"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' +
+      '<a:tblPr firstRow="1" bandRow="1"/><a:tblGrid>' + o.colW.map(w => '<a:gridCol w="' + X(w) + '"/>').join('') + '</a:tblGrid>' +
+      rows + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
   };
   const bgRect = () => shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg });
   // ---- package ----
@@ -5727,7 +5757,7 @@ const PPTX = (() => {
       'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
       '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
       '<p:sldIdLst>' + sldIds + '</p:sldIdLst>' +
-      '<p:sldSz cx="' + SW + '" cy="' + SH + '" type="screen16x9"/>' +
+      '<p:sldSz cx="' + SW + '" cy="' + SH + '"/>' +
       '<p:notesSz cx="6858000" cy="9144000"/></p:presentation>';
     let rels = '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>' +
       '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>';
@@ -5746,9 +5776,9 @@ const PPTX = (() => {
       '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
       '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + SW + '" cy="' + SH + '"/>' +
       '<a:chOff x="0" y="0"/><a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr>' +
-      '</p:spTree></p:cSld><p:clrMap bk1="000000" bk2="FFFFFF" tx1="000000" tx2="FFFFFF" ' +
-      'accent1="FFFFFF" accent2="000000" accent3="FFFFFF" accent4="000000" accent5="FFFFFF" ' +
-      'accent6="000000" hlink="FFFFFF" folHlink="FFFFFF"/>' +
+      '</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" ' +
+      'accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>' +
+      '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>' +
       '<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4400" b="1"/></a:lvl1pPr></p:titleStyle>' +
       '<p:bodyStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>' +
       '<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>';
@@ -5783,12 +5813,15 @@ const PPTX = (() => {
       '<a:accent3><a:srgbClr val="8FCB8F"/></a:accent3><a:accent4><a:srgbClr val="D98C8C"/></a:accent4>' +
       '<a:accent5><a:srgbClr val="3A4034"/></a:accent5><a:accent6><a:srgbClr val="33454F"/></a:accent6>' +
       '<a:hlink><a:srgbClr val="E8A33D"/></a:hlink><a:folHlink><a:srgbClr val="9AA7B0"/></a:folHlink>' +
-      '</a:clrScheme><a:fmtScheme name="Advisor"><a:fillStyleLst>' +
-      '<a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:fillStyleLst>' +
-      '<a:lnStyleLst><a:ln w="19050"><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:ln></a:lnStyleLst>' +
-      '<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>' +
-      '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="dk1"/></a:solidFill></a:bgFillStyleLst>' +
-      '</a:fmtScheme></a:themeElements></a:theme>';
+      '</a:clrScheme><a:fontScheme name="Advisor">' +
+      '<a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+      '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>' +
+      '<a:fmtScheme name="Advisor"><a:fillStyleLst>' +
+      '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>' +
+      '<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>' +
+      '<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>' +
+      '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>' +
+      '</a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>';
     const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     F['docProps/core.xml'] =
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -5903,12 +5936,10 @@ function toggleExportMenu() {
   exMenu = el('div', { class:'exportmenu', role:'menu' }, [
     item('PowerPoint (.pptx)', 'Download the .pptx file', () => exportPptx('pptx')),
     item('Google Slides', 'Saves a .pptx, then opens Slides to convert it into a native deck', () => {
-      exportPptx('pptx');
-      window.open('https://slides.google.com', '_blank', 'noopener');
+      if (exportPptx('pptx')) exportGuide('slides');
     }),
     item('Canva', 'Saves a .pptx, then opens Canva to convert it into a native design', () => {
-      exportPptx('pptx');
-      window.open('https://www.canva.com/create/presentations/', '_blank', 'noopener');
+      if (exportPptx('pptx')) exportGuide('canva');
     }),
     item('LibreOffice (.odp)', 'Download the .odp file', () => exportPptx('odp'))
   ]);
@@ -5918,6 +5949,31 @@ function toggleExportMenu() {
   exMenu.style.left = Math.max(8, r.right + window.scrollX - 300) + 'px';
   document.addEventListener('pointerdown', outsideExportMenu, true);
   document.addEventListener('keydown', escExportMenu);
+}
+/* v2.52.0: Slides and Canva take a .pptx in through their own import, which
+   no web page can drive for them: the file is saved, then these steps stay on
+   screen beside a link to the service, until closed. */
+function exportGuide(kind) {
+  const old = document.querySelector('.exportguide');
+  if (old) old.remove();
+  const G = kind === 'slides'
+    ? { name:'Google Slides', url:'https://docs.google.com/presentation/', steps:[
+        'The report was saved as a .pptx in your downloads.',
+        'Open Google Slides and click the folder icon (Open file picker).',
+        'Choose Upload and drop the .pptx there — Slides opens it as a native deck you can edit and share.'] }
+    : { name:'Canva', url:'https://www.canva.com/', steps:[
+        'The report was saved as a .pptx in your downloads.',
+        'Open Canva and choose Create a design ▸ Import file, or drag the .pptx onto the Canva home page.',
+        'Canva opens it as an editable presentation design.'] };
+  const box = el('div', { class:'exportguide', role:'dialog' }, [
+    el('b', { text:t('Open the report in') + ' ' + G.name }),
+    el('ol', {}, G.steps.map(x => el('li', { text:t(x) }))),
+    el('div', { class:'row' }, [
+      el('button', { class:'btn', text:t('Close'), onclick:() => box.remove() }),
+      el('button', { class:'btn solid', text:t('Open') + ' ' + G.name, onclick:() => { window.open(G.url, '_blank', 'noopener'); box.remove(); } })
+    ])
+  ]);
+  document.body.appendChild(box);
 }
 /* ==================== ODP engine (v2.41.0): native OpenDocument output ====================
    Same shape/table call pattern as the PPTX engine above, so the report code
@@ -5944,17 +6000,23 @@ const ODP = (() => {
     'xmlns:dc="http://purl.org/dc/elements/1.1/"';
   let nuid = 0;
   const gstyles = {};
-  const gstyle = (fill, stroke, strokew) => {
-    const k = (fill || '-') + '|' + (stroke || '-') + '|' + (strokew || 0);
+  /* v2.52.0: a frame keeps its size and wraps its text — LibreOffice grows
+     a custom shape round its text and padding by default, which pushed
+     values off the slide and split the colour strips — padding and the
+     vertical anchor ride the same style */
+  const gstyle = (fill, stroke, strokew, anchor, pad) => {
+    const k = (fill || '-') + '|' + (stroke || '-') + '|' + (strokew || 0) + '|' + (anchor || 't') + '|' + pad.join(',');
     if (!gstyles[k]) {
       const nm = 'gr' + Object.keys(gstyles).length;
-      gstyles[k] = '<style:style style:name="' + nm + '" style:family="graphic" ' +
-        'style:parent-style-name="standard">' +
+      gstyles[k] = '<style:style style:name="' + nm + '" style:family="graphic">' +
         '<style:graphic-properties draw:fill="' + (fill ? 'solid' : 'none') + '"' +
         (fill ? ' draw:fill-color="#' + fill + '"' : '') +
         ' draw:stroke="' + (stroke ? 'solid' : 'none') + '"' +
         (stroke ? ' svg:stroke-color="#' + stroke + '" svg:stroke-width="' + strokew + 'pt"' : '') +
-        '/></style:style>';
+        ' draw:auto-grow-height="false" draw:auto-grow-width="false" fo:wrap-option="wrap"' +
+        ' draw:textarea-horizontal-align="justify" draw:textarea-vertical-align="' + (anchor === 'ctr' ? 'middle' : 'top') + '"' +
+        ' fo:padding-top="' + pad[0] + 'cm" fo:padding-right="' + pad[1] + 'cm" fo:padding-bottom="' + pad[2] + 'cm" fo:padding-left="' + pad[3] + 'cm"' +
+        ' draw:shadow="hidden"/></style:style>';
     }
     return 'gr' + Object.keys(gstyles).indexOf(k);
   };
@@ -5998,8 +6060,10 @@ const ODP = (() => {
   };
   const shape = (o) => {
     const id = ++nuid;
+    const p2 = v => (v * 2.54).toFixed(2);
     const gs = gstyle(o.fill || null, o.line ? (o.lineColor || o.fill) : null,
-      o.line ? ((o.lnW || 19050) / 12700).toFixed(2) : 0);
+      o.line ? ((o.lnW || 19050) / 12700).toFixed(2) : 0, o.anchor,
+      [p2(o.padT !== undefined ? o.padT : 0.05), p2(o.padR !== undefined ? o.padR : 0.1), p2(o.padB !== undefined ? o.padB : 0.05), p2(o.padL !== undefined ? o.padL : 0.1)]);
     // draw:text-style-name gives the shape a default paragraph context (as LO writes it)
     if (!pstyles['p|l']) pstyle('l');
     return '<draw:custom-shape draw:style-name="' + gs + '" draw:text-style-name="P0" ' +
@@ -6021,15 +6085,15 @@ const ODP = (() => {
     let y = o.y;
     o.rows.forEach((row, ri) => {
       let x = o.x;
-      const rh = o.rowH || 0.34;
+      const rh = (o.rowHs ? o.rowHs[ri] : o.rowH) || 0.34;
       const idx = (o.r0 || 0) + ri;
       row.forEach((cell, ci) => {
         const w = o.colW[ci];
         const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
-        out.push(shape({ x, y, w, h:rh,
+        out.push(shape({ x, y, w, h:rh, anchor:'ctr', padT:0.03, padB:0.03, padL:0.08, padR:0.08,
           fill:idx === 0 ? C.panel : (idx % 2 ? '22313B' : C.bg),
           line:1, lineColor:C.line, lnW:6350,
-          paras:[{ runs:[{ t:cell.t, sz:cell.sz || 12, b:!!cell.b || idx === 0,
+          paras:[{ runs:[{ t:cell.t, sz:cell.sz || o.sz || 11, b:!!cell.b || idx === 0,
             color:cell.color || (idx === 0 ? C.amber : C.white) }], align:al }] }));
         x += w;
       });
@@ -6057,7 +6121,8 @@ const ODP = (() => {
   function pack(slides) {
     const F = {};
     const autost = ['<style:page-layout style:name="PM0">' +
-      '<style:page-layout-properties fo:page-width="33.867cm" fo:page-height="19.05cm"/>' +
+      '<style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" ' +
+      'fo:page-width="33.867cm" fo:page-height="19.05cm" style:print-orientation="landscape"/>' +
       '</style:page-layout>'];
     F['mimetype'] = 'application/vnd.oasis.opendocument.presentation';
     F['META-INF/manifest.xml'] =
@@ -6081,11 +6146,13 @@ const ODP = (() => {
       '<office:document-styles ' + NS + ' office:version="1.2">' +
       '<office:styles>' +
       '<style:style style:name="dp1" style:family="drawing-page">' +
-      '<style:drawing-page-properties draw:fill="none"/></style:style>' +
+      '<style:drawing-page-properties draw:fill="solid" draw:fill-color="#' + C.bg + '" presentation:background-visible="true" presentation:background-objects-visible="true"/></style:style>' +
       '</office:styles><office:automatic-styles>' + autost.join('') + '</office:automatic-styles>' +
       '<office:master-styles>' +
       '<draw:layer-set><draw:layer draw:name="layout"/><draw:layer draw:name="background"/><draw:layer draw:name="backgroundobjects"/></draw:layer-set>' +
-      '<draw:master-page draw:name="Default" style:page-layout-name="PM0" draw:style-name="dp1"/>' +
+      /* v2.52.0: a master page is style:master-page — the draw: name made
+         LibreOffice drop it, and its 33.9 cm page with it, for a default 28 cm one */
+      '<style:master-page style:name="Default" style:page-layout-name="PM0" draw:style-name="dp1"/>' +
       '</office:master-styles></office:document-styles>';
     F['content.xml'] =
       '<?xml version="1.0" encoding="UTF-8"?>' +
@@ -6099,7 +6166,7 @@ const ODP = (() => {
       '</office:automatic-styles><office:body><office:presentation>' +
       slides.map((shapes, i) =>
         '<draw:page draw:name="page' + (i + 1) + '" draw:style-name="dp1" ' +
-        'draw:master-page-name="Default" presentation:page-layout-name="PM0">' +
+        'draw:master-page-name="Default">' +
         shapes.join('') + '</draw:page>').join('') +
       '</office:presentation></office:body></office:document-content>';
     const names = Object.keys(F);
@@ -6279,11 +6346,9 @@ function exportPptx(format) {
         const s = live.per[k] || {};
         return nm(k) + ': ' + ((s.total === null || s.total === undefined) ? '—' : euro(s.total));
       }).join('   ·   ');
-      let mshapes = [], my = 1.9;
-      [mhead].concat(mrows).forEach((r, i) => {
-        mshapes.push(R.table({ x:0.6, y:my, colW:mcolW, rowH:mhs[i], rows:[r], r0:i }));
-        my += mhs[i];
-      });
+      /* one table, each row as tall as its longest cell needs */
+      const mshapes = [R.table({ x:0.6, y:1.9, colW:mcolW, rowHs:mhs, rows:[mhead].concat(mrows) })];
+      const my = 1.9 + mhs.reduce((a, b) => a + b, 0);
       S2.push(head(t('Materials selected'), t('Every material chosen in the assemblies, and the budget idea'), Z.wz + ' ' + Z.sz).concat(mshapes.concat([
         R.shape({ x:0.6, y:my + 0.1, w:12.13, h:0.6, paras:[{ runs:[
           { t:idea + '   ·   ' + t('Overall budget') + ': ' + euro(live.sum), sz:12 }] }] })
@@ -6294,7 +6359,7 @@ function exportPptx(format) {
       const A = assemble(ROOF_STATE.layers, 'up', 'ext');
       const lim = umax(Z, 'roof');
       S2.push(head(t('Roofs'), t('Layer, from outside inwards'), Z.wz).concat([
-        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
+        R.table({ x:0.6, y:1.9, colW:[4.6, 1.25, 1.0, 1.15], rowH:0.34,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
@@ -6314,14 +6379,14 @@ function exportPptx(format) {
       const Ub = F.mode === 'cont' ? ubfContinuous(Bb, F.z, rf).u : ubfPerimeter(Bb, F.d, rf).u;
       const gnm = (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME).ground;
       S2.push(head(t('Floors'), t('Layer, from outside inwards'), Z.wz).concat([
-        R.table({ x:0.6, y:1.9, colW:[4.6, 1.1, 1.3, 1.3], rowH:0.3,
+        R.table({ x:0.6, y:1.9, colW:[4.6, 1.25, 1.0, 1.15], rowH:0.3,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.5, 1.9, 3.23, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.3 + 0.2),
         ...strip(PAV_STATE.layers, 1.9 + (A.parts.length + 1) * 0.3 + 0.85),
-        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.3 + 1.5, w:12.13, h:0.45, paras:[{ runs:[
+        R.shape({ x:0.6, y:1.9 + (A.parts.length + 1) * 0.3 + 1.75, w:12.13, h:0.45, paras:[{ runs:[
           { t:gnm + ' — B′ = ' + fmt(Bb, 1) + ' m  ·  Ubf = ' + fmt(Ub, 2) + ' W/(m²·°C)', sz:12 }] }] }),
-        ...strip(FLR_STATE.layers, 1.9 + (A.parts.length + 1) * 0.3 + 2.1)
+        ...strip(FLR_STATE.layers, 1.9 + (A.parts.length + 1) * 0.3 + 2.3)
       ]));
     }
     // ---- 5. external walls ----
@@ -6329,7 +6394,7 @@ function exportPptx(format) {
       const A = assemble(WEXT_STATE.layers, 'h', 'ext');
       const lim = umax(Z, 'wall');
       S2.push(head(t('External walls'), t('Layer, from outside inwards'), Z.wz).concat([
-        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.34,
+        R.table({ x:0.6, y:1.9, colW:[4.6, 1.25, 1.0, 1.15], rowH:0.34,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.34 + 0.25),
@@ -6349,7 +6414,7 @@ function exportPptx(format) {
       const UM = usefulMass(A, cap);
       const itW = UM.contrib * W.swall / Math.max(W.ap, 1e-6);
       S2.push(head(t('Internal walls'), t('Layer, from outside inwards'), Z.wz).concat([
-        R.table({ x:0.6, y:1.9, colW:[4.4, 1.1, 1.3, 1.3], rowH:0.32,
+        R.table({ x:0.6, y:1.9, colW:[4.6, 1.25, 1.0, 1.15], rowH:0.32,
           rows:[layerHead].concat(layerRows(A)) }),
         metric(9.0, 1.9, 3.73, fmt(A.U, 2), 'U W/(m²·°C)'),
         uline(A, lim, 1.9 + (A.parts.length + 1) * 0.32 + 0.2),
@@ -6372,10 +6437,10 @@ function exportPptx(format) {
           [{ t:t('Glazing'), b:1 }, { t:t(GLAZ_FAMILY[G.f].name) + ' — Ug ' + fmt(G.ug, 1) + ', g ' + fmt(G.g, 2) }],
           [{ t:t('Frame'), b:1 }, { t:t(F.name) + ' — Fg ' + fmt(fg, 2) + (F.uf === null ? '' : ', Uf ' + fmt(F.uf, 1)) }],
           [{ t:t('Orientation'), b:1 }, { t:COMPASS8[W.ori] }],
-          [{ t:t('Night shutter'), b:1 }, { t:dn ? dn.name : W.dev }]
+          [{ t:t('Night shutter'), b:1 }, { t:dn ? t(dn.name) : W.dev }]
         ] }),
         metric(9.2, 1.9, 3.5, fmt(uw, 2), 'Uw W/(m²·°C)'),
-        R.shape({ x:9.0, y:3.7, w:3.73, h:0.5, paras:[{ runs:((() => {
+        R.shape({ x:9.0, y:3.6, w:3.73, h:1.3, paras:[{ runs:((() => {
           const v = verdict(uw, lim);
           return [{ t:'Uw = ' + fmt(uw, 2) + '  ·  ' + t('Limit') + ' ' + fmt(lim, 2) +
             ' (' + t(W.use === 'cs' ? 'Commerce and services' : 'Dwelling') + ')', sz:13 },
@@ -6454,7 +6519,8 @@ function exportPptx(format) {
     ]));
     download(R.build(S2), slugify(sitePrefix() + 'report') + (format === 'odp' ? '.odp' : '.pptx'));
     toast(t('Report exported'));
-  } catch (e) { toast('Export failed: ' + e.message); }
+    return true;
+  } catch (e) { toast('Export failed: ' + e.message); return false; }
 }
 
 function saveSession() {
@@ -6630,9 +6696,11 @@ function applySession(data) {
                         price: (s.price === undefined || s.price === '' ? null : s.price) };
   });
   const aa = aaApplyMeta(data);
+  if (data.meta && data.meta.study && typeof data.meta.study === 'object') AA_STATE.study = data.meta.study;
   /* An imported study carries exact coordinates in meta.site — the setup
      latitude field offers them back for anything typed by hand. */
   if (data.meta && data.meta.site && isFinite(+data.meta.site.lat)) data.site.lat = +data.meta.site.lat;
+  if (data.meta && data.meta.site && isFinite(+data.meta.site.lon)) data.site.lon = +data.meta.site.lon;
   reflectSiteOnSetupForm(data.site);
   mountApp(data.site, data.tab);
   return aa ? 'ok-aa' : 'ok';
@@ -6649,7 +6717,9 @@ function loadSessionFile(file) {
        get one, rather than "not a Construction Advisor file". */
     if (data && data.kind === 'architecture-advisor-study') {
       if (!data.construction) { toast('This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction'); return; }
+      const back = Object.assign({}, data); delete back.readout; delete back.construction;
       data = data.construction;
+      data.meta = Object.assign({}, data.meta, { study:back });
     }
     if (STATE.site && !confirm(t('Replace the current assessment with this file?'))) return;
     const result = applySession(data);
@@ -8452,8 +8522,12 @@ function mountApp(site, keepTab) {
   $('#tabsNav').hidden = false;
   $('#sitechip').classList.add('on');
   $('#chipLoc').textContent = site.conc || site.nuts;
-  $('#chipMeta').innerHTML = site.nuts + ' · ' + fmt(site.alt, 0) + ' m '
-    + '<span class="zn">' + STATE.zone.wz + ' ' + STATE.zone.sz + '</span>';
+  /* v2.51.0: the chip as the Architecture Advisor writes it — coordinates
+     where known, altitude, the SCE zones in one pill */
+  const ll = isFinite(+site.lat) && isFinite(+site.lon)
+    ? fmt(Math.abs(site.lat), 2) + '° ' + (site.lat < 0 ? 'S' : 'N') + ' ' + fmt(Math.abs(site.lon), 2) + '° ' + (site.lon < 0 ? 'W' : 'E') : site.nuts;
+  $('#chipMeta').innerHTML = ll + ' · ' + fmt(site.alt, 0) + ' m '
+    + '<span class="zn">' + STATE.zone.wz + ' · ' + STATE.zone.sz + '</span>';
   document.title = APP.tabName + ' — ' + (site.conc || site.nuts);
 
   const tl = $('#tablist'); tl.innerHTML = '';
@@ -8494,6 +8568,16 @@ function mountApp(site, keepTab) {
     }
     un.className = 'tab cadbtn'; un.hidden = false; un.disabled = !UNDO.stack.length;
     tl.appendChild(un);
+    let bk = document.querySelector('#btnBackAA');
+    if (!bk) {
+      bk = el('button', { class:'tab cadbtn', id:'btnBackAA', 'data-t':'btnBackAA' });
+      bk.title = 'Reopen this project in Architecture Advisor PT';
+      bk.dataset.en = '◂ Back to Architecture';
+      bk.innerHTML = (LANG === 'pt' && STATIC_PT['btnBackAA'] !== undefined) ? STATIC_PT['btnBackAA'] : '◂ Back to Architecture';
+      bk.addEventListener('click', backToArchitecture);
+    }
+    bk.className = 'tab cadbtn'; bk.hidden = false;
+    tl.appendChild(bk);
     undoReset();
   /* Pavements folded into Floors; a session still holding the old key lands
      on the tab that absorbed it rather than being thrown back to Climate. */
@@ -8633,6 +8717,7 @@ initSetup();
 Object.assign(STATIC_PT, {
   btnExport: 'Exportar',
   btnUndo: 'Anular',
+  btnBackAA: '◂ Voltar à Arquitetura',
   brandsub: 'Envolvente e Orçamento SCE',
   setupTitle: 'Onde vai construir?',
   setupBody: 'A regulamentação térmica portuguesa classifica um local a partir de apenas duas coisas: a região <b>NUTS III</b> em que se insere e a sua <b>altitude</b>. Todos os parâmetros de referência estão tabelados para uma altitude de referência e são corrigidos linearmente a partir dela. Indique o concelho e a cota acima do nível do mar e esta aplicação resolve as zonas de Inverno e de Verão, abrindo depois um mosaico de materiais — naturais e industrializados, próprios da região — antes de percorrer a envolvente elemento a elemento perante os limites efectivamente em vigor. Cada solução é ainda orçamentada por m²: indique a área e o preço unitário lido no Gerador de Preços e a aplicação soma quantidades, custos parcelares e orçamento global.',
@@ -8655,7 +8740,7 @@ Object.assign(STATIC_PT, {
   btnGo: 'Percorrer a envolvente',
   btnLoadSetup: 'Continuar uma avaliação guardada',
   btnSave: 'Guardar',
-  btnRestart: 'Recomeçar',
+  btnRestart: 'Mudar de local',
   ex1h: 'Fundado na regulamentação e não numa regra prática',
   ex1p: 'Clima de referência por NUTS III e os seus declives em altitude, coeficientes de transmissão térmica máximos por zona e região, fator solar admissível por inércia, coeficientes de pavimentos térreos por dimensão característica — lidos no Manual SCE e na Portaria, e citados onde são usados.',
   ex2h: 'Componha o elemento, leia o número',
@@ -9550,6 +9635,9 @@ Object.assign(PT, {
   'This Architecture Advisor study predates the hand-off — open it there and press Continue to Construction': 'Este estudo do Architecture Advisor é anterior à passagem — abra-o lá e carregue em Continuar para a Construção',
   'Replace the current assessment with this file?': 'Substituir a avaliação em curso por este ficheiro?',
   'The study in the address could not be read': 'Não foi possível ler o estudo no endereço',
+  'The browser blocked the new tab — allow pop-ups for this site': 'O navegador bloqueou o novo separador — permita janelas para este sítio',
+  'No Architecture Advisor study came with this assessment — it opens at its start': 'Nenhum estudo do Architecture Advisor veio com esta avaliação — abre no início',
+  'Reopen this project in Architecture Advisor PT': 'Reabrir este projeto no Architecture Advisor PT',
   'From the Architecture Advisor': 'Do Architecture Advisor',
   'Measured envelope, as decided there — areas follow true solar orientation': 'Envolvente medida, tal como decidida nessa aplicação — as áreas seguem a orientação solar verdadeira',
   'Storeys': 'Pisos',
@@ -9681,6 +9769,13 @@ Object.assign(PT, {
   'Methods and sources': 'Métodos e fontes',
   'Nothing to export yet': 'Ainda nada para exportar',
   'Report exported': 'Relatório exportado',
+  'Open the report in': 'Abrir o relatório no',
+  'Close': 'Fechar', 'Open': 'Abrir',
+  'The report was saved as a .pptx in your downloads.': 'O relatório foi guardado como .pptx nas suas transferências.',
+  'Open Google Slides and click the folder icon (Open file picker).': 'Abra o Google Slides e clique no ícone de pasta (Abrir seletor de ficheiros).',
+  'Choose Upload and drop the .pptx there — Slides opens it as a native deck you can edit and share.': 'Escolha Carregar e largue lá o .pptx — o Slides abre-o como apresentação nativa, para editar e partilhar.',
+  'Open Canva and choose Create a design ▸ Import file, or drag the .pptx onto the Canva home page.': 'Abra o Canva e escolha Criar um design ▸ Importar ficheiro, ou arraste o .pptx para a página inicial do Canva.',
+  'Canva opens it as an editable presentation design.': 'O Canva abre-o como um design de apresentação editável.',
   'Full methods and sources live in the application footer.': 'Métodos e fontes completos no rodapé da aplicação.',
   'Exposure and the air path': 'Exposição e o percurso do ar',
   'Area × unit price, per element': 'Área × preço unitário, por elemento',
