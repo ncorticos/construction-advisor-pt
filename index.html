@@ -433,6 +433,10 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photocredit a{color:var(--muted)}
 /* --- v2.7.0: photo editor ---------------------------------------------- */
 .photoedit-toggle{margin-left:auto}
+.varbox{border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
+.vartable{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px}
+.vartable th,.vartable td{padding:4px 6px; border-bottom:1px solid var(--line); text-align:left}
+.vartable td .btn{margin-right:4px}
 .udbox{border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
 .udout{font-family:var(--mono, monospace); font-size:12.5px}
 .restorebar{display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; border:1px solid var(--c1); border-radius:10px;
@@ -652,7 +656,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.53.0',
+  version:     '2.54.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6568,7 +6572,7 @@ function exportPptx(format) {
       const live = budgetTotals();
       const nm = k => (LANG === 'pt' ? BUDGET_PT_NAME : BUDGET_EN_NAME)[k];
       S2.push(head(t('Budget'), t('Area × unit price, per element'), Z.wz + ' ' + Z.sz).concat([
-        R.table({ x:0.6, y:1.9, colW:[4.0, 1.4, 1.8, 1.8], rowH:0.4, rows:[
+        R.table({ x:0.6, y:1.9, colW:[3.4, 1.2, 1.6, 1.6], rowH:0.4, rows:[
           [{ t:t('Item'), b:1 }, { t:t('Area (m²)'), b:1 }, { t:t('Unit price (€/m²)'), b:1 }, { t:t('Total (€)'), b:1 }]
         ].concat(BUDGET_ORDER.map(k => {
           const s = live.per[k] || {};
@@ -6580,7 +6584,7 @@ function exportPptx(format) {
           [{ t:t('Works'), b:1 }, { t:'' }, { t:'' }, { t:euro(live.sum), b:1 }],
           [{ t:t('Contingency') + ' ' + fmt(live.cont, 0) + ' %' }, { t:'' }, { t:'' }, { t:euro(live.contAmt) }],
           [{ t:t('IVA') + ' ' + fmt(live.vat, 0) + ' %' }, { t:'' }, { t:'' }, { t:euro(live.vatAmt) }]] : [])) }),
-        metric(9.9, 1.9, 2.83, fmt(live.grand, 2) + ' €', t('Overall budget'))
+        metric(8.6, 1.9, 4.13, fmt(live.grand, 2) + ' €', t('Overall budget'))
       ]));
     }
     // ---- 11. closing ----
@@ -6767,6 +6771,7 @@ function applySession(data) {
                         price: (s.price === undefined || s.price === '' ? null : s.price) });
   });
   BUDGET_STATE.opts = Object.assign({ cont:0, vat:0 }, BUDGET_STATE.opts);
+  if (!BUDGET_STATE.variants || typeof BUDGET_STATE.variants !== 'object') BUDGET_STATE.variants = {};
   if (!BUDGET_STATE.win.ud) BUDGET_STATE.win.ud = { p:null, w:null, h:null };
   const aa = aaApplyMeta(data);
   if (data.meta && data.meta.study && typeof data.meta.study === 'object') AA_STATE.study = data.meta.study;
@@ -6884,7 +6889,10 @@ const BUDGET_STATE = {
   win:    { area:null, price:null, ud:{ p:null, w:null, h:null } },
   /* v2.54.0: what the bank's prices leave out — a contingency share and the
      IVA, both as % and both 0 until the student sets them */
-  opts:   { cont:0, vat:0 }
+  opts:   { cont:0, vat:0 },
+  /* v2.54.0: up to three kept variants per element — a copy of its build-up
+     and the unit price it carried — so solutions can be compared side by side */
+  variants: {}
 };
 const BUDGET_ORDER = ['roof','pav','ground','wext','wint','win'];
 const BUDGET_PT_NAME = {
@@ -6921,6 +6929,53 @@ function budgetTotals() {
   const cont = pc(o.cont), vat = pc(o.vat);
   const contAmt = sum * cont / 100, vatAmt = (sum + contAmt) * vat / 100;
   return { per, sum, n, cont, vat, contAmt, vatAmt, grand:sum + contAmt + vatAmt };
+}
+/* --- variants: the same element built two or three ways, compared on what
+   the regulation reads (U), what inertia reads (mass) and what it costs.
+   Each element's state is copied whole; Load puts a copy back. ---------- */
+const VARIANT_MAX = 3;
+const VARIANT_SPEC = {
+  roof:  { st:() => ROOF_STATE, flow:'up',   bc:'ext' },
+  pav:   { st:() => PAV_STATE,  flow:'down', bc:'ext' },
+  ground:{ st:() => FLR_STATE,  flow:'down', bc:'ext', buildUpOnly:true },
+  wext:  { st:() => WEXT_STATE, flow:'h',    bc:'ext' },
+  wint:  { st:() => WINT_STATE, flow:'h',    bc:'int' },
+  win:   { st:() => WIN_STATE,  win:true }
+};
+/** U and mass (or, for a window, U and the day–night U) of a copied state. */
+function variantFigures(key, snap) {
+  const sp = VARIANT_SPEC[key];
+  if (!sp || !snap) return null;
+  if (sp.win) {
+    const FR = FRAMES.find(f => f.key === snap.frame) || FRAMES[2];
+    const G = GLAZING[clamp(+snap.glaz || 0, 0, GLAZING.length - 1)];
+    const uw = uWindow(G.ug, FR.uf, snap.quad ? FR.fgq : FR.fg);
+    const DV = DELTA_R.find(d => d.key === snap.dev) || DELTA_R[5];
+    return { u:uw, u2:uDayNight(uw, uWithDevice(uw, DV.dr)), what:t(FR.name) + ' · Ug ' + fmt(G.ug, 1) };
+  }
+  const A = assemble(snap.layers || [], sp.flow, sp.bc);
+  const ins = (snap.layers || []).filter(L => !L.air && MAT[L.key] && MAT[L.key].ins).reduce((a, L) => a + (+L.d || 0), 0);
+  return { u:A.U, mass:A.mass, what:(snap.layers || []).length + ' ' + t('layers') + (ins ? ' · ' + t('insulation') + ' ' + fmt(ins * 100, 0) + ' cm' : '') };
+}
+function variantsOf(key) {
+  const V = BUDGET_STATE.variants || (BUDGET_STATE.variants = {});
+  return V[key] || (V[key] = []);
+}
+function keepVariant(key) {
+  const list = variantsOf(key), sp = VARIANT_SPEC[key];
+  if (!sp || list.length >= VARIANT_MAX) return false;
+  const name = ['A', 'B', 'C'].find(n => !list.some(v => v.name === n));
+  list.push({ name, snap:JSON.parse(JSON.stringify(sp.st())), price:BUDGET_STATE[key].price, ud:BUDGET_STATE[key].ud ? JSON.parse(JSON.stringify(BUDGET_STATE[key].ud)) : undefined });
+  return true;
+}
+function loadVariant(key, name) {
+  const v = variantsOf(key).find(x => x.name === name), sp = VARIANT_SPEC[key];
+  if (!v || !sp) return;
+  const st = sp.st();
+  Object.keys(st).forEach(k => delete st[k]);
+  Object.assign(st, JSON.parse(JSON.stringify(v.snap)));
+  BUDGET_STATE[key].price = v.price === undefined ? null : v.price;
+  if (v.ud) BUDGET_STATE[key].ud = JSON.parse(JSON.stringify(v.ud));
 }
 /* Closest Gerador unit for an element, read off the student's own assembly
    so the button lands on a unit page, not on a chapter index. Each URL is a
@@ -7150,11 +7205,49 @@ function costPanel(host, cfg) {
       if (udOut) { const r = udRate(); udOut.innerHTML = r === null ? t('Fill in the three fields') : '= <b>' + euro(r).replace(' €', '') + ' €/m²</b>'; }
       if (!quiet) checkpoint();
     }
+    /* the kept variants, beside the current build-up */
+    const varBox = el('div', { class:'varbox' });
+    (() => {
+      const sp = VARIANT_SPEC[cfg.key];
+      if (!sp) return;
+      const list = variantsOf(cfg.key), area = S.area;
+      const rowOf = (label, snap, price, acts) => {
+        const f = variantFigures(cfg.key, snap) || {};
+        const tot = (area > 0 && price > 0) ? area * price : null;
+        return [label, f.what || '', fmt(f.u, 2), sp.win ? fmt(f.u2, 2) : fmt(f.mass, 0),
+          price > 0 ? euro(price) : '—', tot === null ? '—' : euro(tot), acts];
+      };
+      const head = [t('Variant'), t('Build-up'), sp.win ? 'Uw' : 'U', sp.win ? 'Uwdn' : t('Mass (kg/m²)'), '€/m²', t('Element total'), ''];
+      const rows = [rowOf('<b>' + t('Current') + '</b>', sp.st(), S.price, '')].concat(list.map(v => rowOf('<b>' + v.name + '</b>', v.snap, v.price, v.name)));
+      const tbl = el('table', { class:'vartable' });
+      tbl.appendChild(el('tr', null, head.map(h => el('th', { text:h }))));
+      rows.forEach(r => {
+        const tr = el('tr');
+        r.slice(0, 6).forEach((c, i) => tr.appendChild(el('td', i === 0 ? { html:c } : { text:c })));
+        const td = el('td');
+        if (r[6]) {
+          td.appendChild(el('button', { class:'btn small', type:'button', text:t('Load'), 'aria-label':t('Load variant') + ' ' + r[6],
+            onclick:() => { if (!confirm(t('Replace the current build-up with variant') + ' ' + r[6] + '?')) return;
+              loadVariant(cfg.key, r[6]); checkpoint(); rebuildCurrentPage(); toast(t('Variant loaded')); } }));
+          td.appendChild(el('button', { class:'btn small', type:'button', text:'×', 'aria-label':t('Delete variant') + ' ' + r[6], title:t('Delete variant') + ' ' + r[6],
+            onclick:() => { const L = variantsOf(cfg.key), i = L.findIndex(x => x.name === r[6]); if (i >= 0) L.splice(i, 1); checkpoint(); render(); } }));
+        }
+        tr.appendChild(td); tbl.appendChild(tr);
+      });
+      varBox.appendChild(el('div', { class:'limitrow' }, [
+        el('span', { html:'<b>' + t('Variants') + '</b> — ' + t('keep this build-up, change it, and compare') }),
+        el('button', { class:'btn small', type:'button', text:'+ ' + t('Keep as a variant'), disabled:list.length >= VARIANT_MAX ? '' : null,
+          onclick:() => { if (keepVariant(cfg.key)) { checkpoint(); render(); } } })
+      ]));
+      if (list.length) varBox.appendChild(tbl);
+      if (sp.buildUpOnly) varBox.appendChild(el('p', { class:'costlink', text:t('Ground floor: U of the build-up alone; the ground’s own part (Tabelas 27 and 28) is read on the page above.') }));
+    })();
     box.appendChild(el('div', { class:'costbox' }, [
       grid, udBox,
       el('div', null, [
         totBox,
         optGrid,
+        varBox,
         el('p', { class:'costlink', text:t('The Gerador’s prices leave out IVA. Mainland standard rate 23 %; the reduced 6 % applies only to the works the Código do IVA lists for it; Madeira and the Azores apply their own rates — confirm the rate in force. A contingency share covers what a teaching estimate cannot see.') }),
         el('p', { class:'costlink', html:t('Reference price at') + ' ' + aTag(blink, blabel)
           + ' — Gerador de Preços, CYPE.' + extra + ' ' + t(cfg.unitHint || '')
@@ -8832,7 +8925,8 @@ function mountApp(site, keepTab) {
       }
     });
     /* a tab built earlier shows the budget as it stands now */
-    COST_LIVE.forEach(o => { if (o.refresh && o.box.isConnected) o.refresh(); });
+    for (let i = COST_LIVE.length - 1; i >= 0; i--) if (!COST_LIVE[i].box.isConnected) COST_LIVE.splice(i, 1);
+    COST_LIVE.forEach(o => { if (o.refresh) o.refresh(); });
     requestAnimationFrame(redrawVisiblePanels);
     setTimeout(redrawVisiblePanels, 150);
     window.scrollTo(0, 0);
@@ -9815,6 +9909,22 @@ Object.assign(PT, {
   'Solid plastic shutter, unfilled': 'Portada opaca de plástico, sem enchimento',
   'Solid metal shutter': 'Portada opaca metálica',
   'Window area': 'Área do vão',
+  'Variant': 'Variante',
+  'Element total': 'Total do elemento',
+  'Variants': 'Variantes',
+  'Build-up': 'Composição',
+  'Mass (kg/m²)': 'Massa (kg/m²)',
+  'Current': 'Actual',
+  'Load': 'Carregar',
+  'Load variant': 'Carregar variante',
+  'Delete variant': 'Apagar variante',
+  'Replace the current build-up with variant': 'Substituir a composição actual pela variante',
+  'Variant loaded': 'Variante carregada',
+  'keep this build-up, change it, and compare': 'guarde esta composição, altere-a e compare',
+  'Keep as a variant': 'Guardar como variante',
+  'layers': 'camadas',
+  'insulation': 'isolamento',
+  'Ground floor: U of the build-up alone; the ground’s own part (Tabelas 27 and 28) is read on the page above.': 'Pavimento térreo: U só da composição; a parte do próprio terreno (Tabelas 27 e 28) lê-se na página acima.',
   'Contingency': 'Imprevistos',
   'contingency': 'imprevistos',
   'IVA': 'IVA',

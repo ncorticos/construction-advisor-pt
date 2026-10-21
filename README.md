@@ -8,7 +8,7 @@ A site is reduced to two things — a NUTS III region and an altitude — exactl
 
 Every envelope solution also carries quantities and a cost: the student enters the area and the unit price read from the Gerador de Preços, and the app totals each element and the overall budget — with CSV export — so the thermal choice is always read together with what it costs.
 
-Single self-contained HTML file. No build step, no server, no external calls once loaded — nothing is uploaded, and it runs the same offline as it does here.
+One HTML file plus its photographs (`photos.js` and the `photos/` folder, kept next to it). No build step, no server, no external calls once loaded — nothing is uploaded, and it runs the same offline as it does here. The assessment is kept in the browser as it is worked on, and offered back on the next visit; **Save** writes the file that travels between computers.
 
 ## What it's grounded in
 
@@ -23,9 +23,13 @@ The current, official versions of all SCE legislation — consolidated and kept 
 
 ### Photographs
 
-The thirty-three material photographs are embedded from [Wikimedia Commons](https://commons.wikimedia.org/), each under its own free licence (CC BY, CC BY-SA, CC0 or public domain). Author, licence and file page ride with every material inside the app's detail panel — the credits live where the images are seen.
+The thirty-three material photographs come from [Wikimedia Commons](https://commons.wikimedia.org/), each under its own free licence (CC BY, CC BY-SA, CC0 or public domain). Author, licence and file page ride with every material inside the app's detail panel — the credits live where the images are seen.
 
-**Replacing a photograph (v2.7.0).** On the Materials tab, press **Edit photos** (or open the app with `#edit-photos` at the end of the address). Pick a material and upload, drag in, paste, or link its photograph — a Wikimedia Commons file page is turned into its image automatically — then fill in author, licence and source page. Each image is cropped from the centre to the mosaic proportion (576 × 402 px JPEG) and embedded, so the app stays offline. Replacements live only in the browser that made them until **Download app with these photos** produces a new `index.html` with them baked in; upload that file to this repository to publish them to students. A link from a site that forbids embedding is kept as a live link and shows only while online.
+Each photograph is a file, `photos/<material>.jpg`; its author, licence and source page are in `photos.js`, which `index.html` loads first. A photograph should show the raw construction material — the brick, the board, the stone — not a finished building.
+
+**Replacing a photograph (v2.54.0).** On the Materials tab, press **Edit photos** (or open the app with `#edit-photos` at the end of the address). Pick a material and upload, drag in, paste, or link its photograph — a Wikimedia Commons file page is turned into its image automatically — then fill in author, licence and source page. Each image is cropped from the centre to the mosaic proportion (576 × 402 px JPEG). Replacements live only in the browser that made them until they are reviewed: **Download photo update (.zip)** gives `photos.js` and the changed JPEGs to unpack into this repository, and **Send for review on GitHub** opens a pull request with them (a fine-grained token for this repository, with Contents and Pull requests write). Nothing reaches students until that pull request is merged. A link from a site that forbids embedding is kept as a live link and shows only while online.
+
+**Links.** A monthly GitHub Action (`.github/workflows/link-check.yml`) requests every supplier, Gerador de Preços, source and photo-credit link and opens an issue listing any that are dead.
 
 ### Other sources cited
 
