@@ -31,6 +31,10 @@ Each photograph is a file, `photos/<material>.jpg`; its author, licence and sour
 
 **Links.** A monthly GitHub Action (`.github/workflows/link-check.yml`) requests every supplier, Gerador de Preços, source and photo-credit link and opens an issue listing any that are dead.
 
+### Traditional materials (v2.58.0)
+
+Five entries were added at students' request, for the traditional wall and roof: basalt stone masonry with lime mortar, timber roof structure, traditional clay roof tile, lime render and interior lime plaster. They are available in every layer selector and in the mosaic. **These five figures are not ITE 50 values.** Tile and lime are conventional figures of the EN ISO 10456 order; the masonry λ is derived from about 80 % basalt and 20 % lime mortar; the roof structure carries a fixed R = 0,18 (m²·°C)/W for rafters at about 13 % of the plan with air between them, so it does not count as solid timber. They are for teaching and should be replaced by measured or declared figures in real work.
+
 ### Other sources cited
 
 A few other works are drawn on for specific figures but are commercially published and copyrighted, so only the citation is given here — the same one the app's own footer shows:

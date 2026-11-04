@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.57.0',
+  version:     '2.58.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1926,7 +1926,8 @@ const MAT_MU = {
   pedrag:10000, pedrac:250, pedrab:10000, taipa:12,
   eps:60, xps:150, mw:1, pur:60, icb:10, fibrom:5,
   reboco:20, estuque:10, gesso:10, ceramico:300, pedran:250, soalho:50, betonilha:20,
-  imperm:50000, seixo:1
+  imperm:50000, seixo:1,
+  telha:40, madcob:5, albasalto:30, rebcal:10, estcal:10
 };
 /** The indoor and outdoor conditions the Glaser check is run at, ISO 13788. */
 const GLASER_ENV = { ti:20, rhi:0.50, rhe:0.80 };
@@ -1940,6 +1941,14 @@ const MATERIALS = [
   { key:'aco',      group:'Structure', name:'Steel',                               lam:50.0, rho:7800 },
   { key:'madeirae', group:'Structure', name:'Softwood, structural',                lam:0.13, rho:450 },
   { key:'madeirad', group:'Structure', name:'Hardwood',                            lam:0.18, rho:700 },
+  /* v2.58.0: the five traditional entries (madcob, albasalto, telha, rebcal,
+     estcal) are NOT ITE 50 transcriptions. telha, rebcal, estcal: conventional
+     figures of the EN ISO 10456 order (clay tile 2000/1,0; lime-sand plaster
+     1600/0,80). albasalto: derived, about 80 % basalt (λ 1,60) + 20 % lime
+     mortar (λ 0,80), between the series and parallel bounds, 1,33 and 1,44.
+     madcob: derived, rafters at about 13 % of the plan (softwood) and the rest
+     air, so that a roof structure does not count as 150 mm of solid timber. */
+  { key:'madcob',   group:'Structure', name:'Timber roof structure, rafters and air space, 0,15 m', r:0.18, rho:60, d:0.15, fixed:1 },
   /* ---- masonry ---- */
   { key:'tijolo11', group:'Masonry',   name:'Hollow clay brick, 0,11 m',           r:0.27, rho:1000, d:0.11, fixed:1 },
   { key:'tijolo15', group:'Masonry',   name:'Hollow clay brick, 0,15 m',           r:0.39, rho:1000, d:0.15, fixed:1 },
@@ -1952,6 +1961,7 @@ const MATERIALS = [
   { key:'pedrac',   group:'Masonry',   name:'Limestone, dense',                    lam:1.70, rho:2200 },
   { key:'pedrab',   group:'Masonry',   name:'Basalt',                              lam:1.60, rho:2700 },
   { key:'taipa',    group:'Masonry',   name:'Rammed earth or adobe',               lam:1.10, rho:1700 },
+  { key:'albasalto',group:'Masonry',   name:'Basalt stone masonry with lime mortar', lam:1.40, rho:2500 },
   /* ---- insulation ---- */
   { key:'eps',      group:'Insulation',name:'Expanded polystyrene, EPS',           lam:0.040, rho:20, ins:1 },
   { key:'xps',      group:'Insulation',name:'Extruded polystyrene, XPS',           lam:0.037, rho:35, ins:1 },
@@ -1961,9 +1971,12 @@ const MATERIALS = [
   { key:'fibrom',   group:'Insulation',name:'Wood-fibre board',                    lam:0.045, rho:160, ins:1 },
   /* ---- finishes ---- */
   { key:'reboco',   group:'Finishes',  name:'Cement render',                       lam:1.30, rho:1900 },
+  { key:'rebcal',   group:'Finishes',  name:'Lime render',                         lam:0.80, rho:1600 },
   { key:'estuque',  group:'Finishes',  name:'Gypsum plaster',                      lam:0.43, rho:1000 },
+  { key:'estcal',   group:'Finishes',  name:'Interior lime plaster',               lam:0.80, rho:1600 },
   { key:'gesso',    group:'Finishes',  name:'Plasterboard',                        lam:0.25, rho:900 },
   { key:'ceramico', group:'Finishes',  name:'Ceramic tile',                        lam:1.30, rho:2000 },
+  { key:'telha',    group:'Finishes',  name:'Traditional clay roof tile',          lam:1.00, rho:2000 },
   { key:'pedran',   group:'Finishes',  name:'Natural stone slab',                  lam:2.30, rho:2600 },
   { key:'soalho',   group:'Finishes',  name:'Timber boarding',                     lam:0.18, rho:600 },
   { key:'betonilha',group:'Finishes',  name:'Screed',                              lam:1.30, rho:1900 },
@@ -7145,6 +7158,8 @@ function closestPrice(key) {
     if (!ls.length) return null;
     const wp = firstIdx(ls, L => L.key === 'imperm'), ins = firstIdx(ls, isIns);
     const inverted = ins >= 0 && wp >= 0 && ins < wp;          // insulation above the membrane
+    if (ls[0].key === 'telha')
+      return { link:GDP_U.roofPitched, linkLabel:'Q · Cobertura inclinada de telhas cerâmicas' };
     if (ls[0].key === 'seixo')
       return { link:GDP_U.roofGravel, linkLabel:'Q · Cobertura plana não acessível, com godo' };
     if (inverted)
@@ -7623,6 +7638,49 @@ const MAT_ICON_DRAW = {
     }
     return s;
   },
+  albasalto: r => {
+    /* Coursed rubble: dark vesicular blocks bedded in pale lime mortar. */
+    let s = iBg('#cfc5ae') + iSpeckle(r, 420, ['#b8ad95', '#ded6c3', '#a89d86'], 0.3, 0.9, 0);
+    const rows = [[4, 30], [37, 24], [64, 30], [97, 24]];
+    rows.forEach(([y, h], k) => {
+      let x = -14 + (k % 2) * 16;
+      while (x < ICON_W) {
+        const w = 26 + r() * 26, top = y + r() * 3, hh = h - r() * 5;
+        const c = pick(r, ['#47474b', '#3d3d41', '#515155', '#434347']);
+        s += '<rect x="' + f1(x) + '" y="' + f1(top) + '" width="' + f1(w) + '" height="' + f1(hh) + '" rx="' + f1(5 + r() * 4) + '" fill="' + c + '"/>' +
+          iSpeckle(r, 26, ['#2a2a2c', '#66666a', '#19191b'], 0.3, 1.2, 0, [x + 3, top + 3, Math.max(w - 6, 1), Math.max(hh - 6, 1)]);
+        x += w + 3 + r() * 3;
+      }
+    });
+    return s;
+  },
+  madcob: r => {
+    /* A rafter in section at each side, the void between them, a purlin behind. */
+    let s = iBg('#e7e2d6') + '<rect x="0" y="62" width="' + ICON_W + '" height="20" fill="#c9a572"/>' +
+      iGrain(r, 64, 80, 5, '#a27c49', 0.8, 1.6);
+    [[12, 40], [108, 40]].forEach(([x, w]) => {
+      s += '<rect x="' + x + '" y="0" width="' + w + '" height="' + ICON_H + '" fill="#e2c088"/>' +
+        '<rect x="' + (x + w) + '" y="0" width="4" height="' + ICON_H + '" fill="#a9824f"/>';
+      for (let i = 0; i < 6; i++) {
+        const gx = x + 4 + i * (w - 8) / 5;
+        s += '<path d="M' + f1(gx) + ' 0q' + f1(r() * 4 - 2) + ' 56 0 ' + ICON_H + '" fill="none" stroke="#b98a52" stroke-width="0.9" opacity="0.7"/>';
+      }
+    });
+    return s;
+  },
+  telha: r => {
+    /* Overlapping courses of canal tile, seen from above the slope. */
+    let s = iBg('#9c5634');
+    const cols = ['#c56f43', '#b9633a', '#cf7c4e', '#ad5b35'];
+    for (let row = 0; row < 5; row++) {
+      const y = row * 24 - 8;
+      for (let x = -20 + (row % 2) * 16; x < ICON_W; x += 32) {
+        s += '<path d="M' + x + ' ' + (y + 34) + 'V' + (y + 12) + 'a16 13 0 0 1 32 0V' + (y + 34) + 'z" fill="' + pick(r, cols) + '" stroke="#7e4326" stroke-width="1"/>' +
+          '<path d="M' + (x + 8) + ' ' + (y + 12) + 'q8 -9 16 0" fill="none" stroke="#e39a6e" stroke-width="1.4" opacity="0.7"/>';
+      }
+    }
+    return s + iSpeckle(r, 60, ['#6f3a20', '#e2a57f'], 0.3, 0.9, 0.5);
+  },
   taipa: r => {
     let s = '', y = 0, i = 0;
     const cols = ['#b88a59', '#a97c4e', '#c39869', '#b2844f', '#9f7246', '#bd9262'];
@@ -7695,6 +7753,24 @@ const MAT_ICON_DRAW = {
       s += '<path d="M' + f1(x) + ' ' + f1(y) + 'q20 -10 40 0" fill="none" stroke="#d4d0c8" stroke-width="2" opacity="0.45"/>';
     }
     return s;
+  },
+  rebcal: r => {
+    let s = iBg('#e4dcc8') + iMottle(r, 22, ['#ddd3bc', '#ece5d4'], 0.6, 12, 34) +
+      iSpeckle(r, 600, ['#c9bda2', '#f2ecdf', '#b9ad93'], 0.25, 0.9, 0);
+    for (let i = 0; i < 7; i++) {
+      const x = r() * 140, y = r() * 100;
+      s += '<path d="M' + f1(x) + ' ' + f1(y) + 'q20 -9 42 1" fill="none" stroke="#f5efe3" stroke-width="2.2" opacity="0.5"/>';
+    }
+    return s;
+  },
+  estcal: r => {
+    let s = iBg('#f6f2e8') + iMottle(r, 16, ['#fbf8f1', '#ece6d8'], 0.7, 16, 40);
+    for (let i = 0; i < 9; i++) {
+      const x = r() * 150 - 10, y = r() * 110;
+      s += '<path d="M' + f1(x) + ' ' + f1(y) + 'q' + f1(28 + r() * 20) + ' ' + f1(-5 - r() * 6) + ' ' + f1(60 + r() * 25) + ' ' + f1(r() * 4) +
+        '" fill="none" stroke="#e0d8c6" stroke-width="' + f1(0.8 + r() * 1.2) + '" opacity="0.45"/>';
+    }
+    return s + iSpeckle(r, 90, ['#d8cfbb'], 0.2, 0.5, 0.6);
   },
   estuque: r => {
     let s = iBg('#efece5') + iMottle(r, 18, ['#f6f4ef', '#e4e0d6'], 0.7, 14, 36);
@@ -8315,6 +8391,8 @@ const ZONES5 = ['Norte','Centro','Sul','Madeira','Açores'];
 const MAT_ZONE = {
   pedrag:['Norte','Centro'], pedrac:['Centro','Sul'], pedrab:['Sul','Madeira','Açores'],
   pedran:['Nationwide'], taipa:['Centro','Sul'],
+  albasalto:['Sul','Madeira','Açores'], madcob:['Norte','Centro','Açores'],
+  telha:['Nationwide'], rebcal:['Nationwide'], estcal:['Nationwide'],
   madeirae:['Norte','Centro','Açores'], madeirad:['Norte','Centro'], soalho:['Norte','Centro','Açores'],
   seixo:['Nationwide'], icb:['Sul'], fibrom:['Nationwide'],
   betao:['Nationwide'], betaol:['Nationwide'], lajealig:['Nationwide'], lajealig27:['Nationwide'],
@@ -8350,7 +8428,7 @@ const MAT_PRODUCERS = {
            { n:'Madeifatima', u:'https://www.madeifatima.com/pt', l:'' }]
 };
 const MAT_KIND = {};
-['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom']
+['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom','albasalto','madcob','rebcal','estcal']
   .forEach(k => MAT_KIND[k] = 'natural');
 MATERIALS.forEach(m => { if (!MAT_KIND[m.key]) MAT_KIND[m.key] = 'industrial'; });
 const MAT_ORIGIN = {
@@ -8360,6 +8438,16 @@ const MAT_ORIGIN = {
           'Alvenaria tradicional e terra de cal — calcários de Lisboa, da Arrábida e do Algarve.'],
   pedrab:['Volcanic stone: the islands above all — Açores and Madeira — and the Lisboa volcanic complex.',
           'Pedra vulcânica: as ilhas acima de tudo — Açores e Madeira — e o complexo vulcânico de Lisboa.'],
+  albasalto:['Thick load-bearing walls of the islands, often about 600 mm: basalt bedded in lime mortar.',
+             'Paredes portantes espessas das ilhas, muitas vezes de cerca de 600 mm: basalto assente em argamassa de cal.'],
+  madcob:['Rafters and purlins carrying tile directly: the traditional roof, with the air between them.',
+          'Varas e madres a suportar diretamente a telha: a cobertura tradicional, com o ar entre elas.'],
+  telha:['Canal and Marseille clay tile, the traditional covering of the pitched roof throughout the country.',
+         'Telha cerâmica de canudo ou marselha, o revestimento tradicional da cobertura inclinada em todo o país.'],
+  rebcal:['Lime and sand render: the traditional outer coat of stone and earth walls, open to vapour.',
+          'Reboco de cal e areia: o revestimento exterior tradicional das paredes de pedra e terra, aberto ao vapor.'],
+  estcal:['Lime plaster on the inner face of traditional walls, finished smooth.',
+          'Reboco de cal na face interior das paredes tradicionais, com acabamento liso.'],
   pedran:['Cut stone for sills, steps and paving; the quarry decides the colour, not the catalogue.',
           'Cantaria para soleiras, degraus e pavimentos; quem decide a cor é a pedreira e não o catálogo.'],
   taipa:['Rammed earth and adobe of the Alentejo and Algarve: mass with almost no insulation.',
@@ -8537,7 +8625,7 @@ function buildMaterials(host) {
    being invented. Region follows the site until another is picked.
    v2.6.0: ~50 verified entries across Norte/Centro/Sul/Madeira/Açores,
    producers and housing-scale distributors. Five products outside the
-   33-material library (roof tiles, windows, doors, sanitary, paint) get
+   material library (roof tiles, windows, doors, sanitary, paint) get
    bilingual labels below; coverage still counts library materials only.
    ================================================================ */
 const SUP_MAT = {
@@ -9078,7 +9166,7 @@ function buildSuppliers(host) {
     frag.appendChild(stats([
       statCard(t('Region'), eff || '—', null, t('Follows the site')),
       statCard(t('Companies'), String(list.length), null, t('Verified entries')),
-      statCard(t('Materials covered'), Object.keys(covered).length + ' / 33', null, t('Of the library'))
+      statCard(t('Materials covered'), Object.keys(covered).length + ' / ' + MATERIALS.length, null, t('Of the library'))
     ]));
     frag.appendChild(hint('sup-dir',
       'A directory, not a marketplace: every entry below was verified — producers make, distributors stock. Anything without a verified entry is listed at the foot as missing instead of being invented. Each entry shows the month it was last verified by hand, where recorded; every link is also checked automatically once a month. Confirm dealers near the site before specifying.'));
@@ -9978,6 +10066,11 @@ Object.assign(PT, {
   "Limestone, dense": "Calcário denso",
   "Basalt": "Basalto",
   "Rammed earth or adobe": "Taipa ou adobe",
+  "Basalt stone masonry with lime mortar": "Alvenaria de pedra basáltica com argamassa de cal",
+  "Timber roof structure, rafters and air space, {} m": "Estrutura de madeira de cobertura, varas e caixa de ar, {} m",
+  "Traditional clay roof tile": "Telha cerâmica tradicional",
+  "Lime render": "Reboco de cal",
+  "Interior lime plaster": "Reboco interior de cal",
   "Expanded polystyrene, EPS": "Poliestireno expandido, EPS",
   "Extruded polystyrene, XPS": "Poliestireno extrudido, XPS",
   "Mineral wool": "Lã mineral",
