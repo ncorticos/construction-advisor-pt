@@ -462,6 +462,20 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .photoedit-msg{font-size:12px; color:var(--muted); margin:6px 0 0; min-height:1em}
 .photoedit-msg.bad{color:var(--c2)}
 .mcard.edited .mphoto{outline:2px solid var(--c1); outline-offset:-2px}
+/* v2.56.0: drawings, per-card upload, drop onto a card */
+.mphoto.drawn,.dphoto.drawn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.dphoto.drawn{object-fit:contain; background:#f3f1ec}
+.mcard{position:relative}
+.mcell{position:relative; display:flex}
+.mcell>.mcard{flex:1; padding-bottom:40px}
+.mupload{position:absolute; left:12px; right:12px; bottom:10px; font:inherit; font-size:11.5px; padding:5px 8px;
+  border:1px solid var(--c1); color:var(--c1); background:#fff; border-radius:6px; cursor:pointer}
+.mupload:hover{background:var(--c1); color:#fff}
+.mcard.dropon{border-color:var(--c1); box-shadow:0 0 0 2px var(--c1)}
+.mcard.dropon::after,.mcard.busy::after{content:attr(data-drop); position:absolute; left:10px; right:10px; top:10px; height:110px;
+  display:flex; align-items:center; justify-content:center; text-align:center; padding:8px; border-radius:6px;
+  background:rgba(37,99,235,.82); color:#fff; font-size:12px; font-weight:600; pointer-events:none}
+.mcard.busy::after{content:'…'; font-size:20px}
 .zonepill{display:inline-block; font-family:var(--mono); font-size:10.5px; border:1px solid var(--line);
   border-radius:20px; padding:1px 9px; margin:1px 4px 1px 0; color:var(--ink2); background:var(--wash)}
 .mcard .mname{font-size:12.5px; font-weight:600; line-height:1.35}
@@ -656,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.55.0',
+  version:     '2.56.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -7375,9 +7389,389 @@ const COST_PANELS = {
 /* v2.54.0: the photographs live beside the app — photos/<material>.jpg, with
    their credits in photos.js, loaded before this script — so the page is a
    tenth of its former weight and a photo change is a file change. Without
-   photos.js (index.html copied on its own) the mosaic simply shows no
-   pictures. */
+   photos.js (index.html copied on its own) the mosaic shows the drawings
+   below for every material. */
 const MAT_PHOTO = (typeof window.MAT_PHOTO_DATA === 'object' && window.MAT_PHOTO_DATA) ? window.MAT_PHOTO_DATA : {};
+
+/* ------------------------------------------------ v2.56.0: MATERIAL DRAWINGS --
+   Every material in the library has a drawing of its own matter, made for
+   this app: the texture, the section or the unit a student would recognise
+   on site. They are generated here from a seeded random source, so each one
+   is identical on every load, weighs a few kilobytes, needs no licence and
+   no network. A photograph uploaded through the editor (or listed in
+   photos.js) still takes precedence over the drawing. */
+const ICON_W = 160, ICON_H = 112;
+function iconRng(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+const f1 = v => Math.round(v * 10) / 10;
+const pick = (r, a) => a[Math.floor(r() * a.length) % a.length];
+/** Scattered round specks: aggregate, pores, crystals. */
+function iSpeckle(r, n, cols, r0, r1, op, box) {
+  const [x0, y0, w, h] = box || [0, 0, ICON_W, ICON_H];
+  let s = '';
+  for (let i = 0; i < n; i++)
+    s += '<circle cx="' + f1(x0 + r() * w) + '" cy="' + f1(y0 + r() * h) + '" r="' + f1(r0 + r() * (r1 - r0)) +
+      '" fill="' + pick(r, cols) + '"' + (op ? ' opacity="' + op + '"' : '') + '/>';
+  return s;
+}
+/** Irregular angular grains (crystals, cork, crushed stone). */
+function iGrains(r, n, cols, s0, s1, box) {
+  const [x0, y0, w, h] = box || [0, 0, ICON_W, ICON_H];
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const cx = x0 + r() * w, cy = y0 + r() * h, k = 4 + Math.floor(r() * 3), rad = s0 + r() * (s1 - s0);
+    let d = '';
+    for (let j = 0; j < k; j++) {
+      const a = j / k * Math.PI * 2 + r() * 0.8, q = rad * (0.6 + r() * 0.6);
+      d += (j ? 'L' : 'M') + f1(cx + Math.cos(a) * q) + ' ' + f1(cy + Math.sin(a) * q);
+    }
+    s += '<path d="' + d + 'Z" fill="' + pick(r, cols) + '"/>';
+  }
+  return s;
+}
+/** Soft blotches that break a flat colour into a material surface. */
+function iMottle(r, n, cols, op, rx0, rx1) {
+  let s = '';
+  for (let i = 0; i < n; i++)
+    s += '<ellipse cx="' + f1(r() * ICON_W) + '" cy="' + f1(r() * ICON_H) + '" rx="' + f1(rx0 + r() * (rx1 - rx0)) +
+      '" ry="' + f1((rx0 + r() * (rx1 - rx0)) * 0.6) + '" fill="' + pick(r, cols) + '" opacity="' + op + '"/>';
+  return s;
+}
+/** Wood grain: long wavy lines across a board. */
+function iGrain(r, y0, y1, gap, col, sw, amp) {
+  let s = '';
+  for (let y = y0 + gap * r(); y < y1; y += gap * (0.6 + r() * 0.8)) {
+    const ph = r() * 6, fr = 0.02 + r() * 0.03, a = amp * (0.4 + r());
+    let d = 'M-2 ' + f1(y);
+    for (let x = 0; x <= ICON_W + 4; x += 8) d += 'L' + x + ' ' + f1(y + Math.sin(x * fr + ph) * a);
+    s += '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="' + f1(sw * (0.6 + r() * 0.8)) + '" opacity="' + f1(0.35 + r() * 0.5) + '"/>';
+  }
+  return s;
+}
+/** An oblique box: front face, top and right side, for units and boards. */
+function iBox(x, y, w, h, dx, dy, front, top, side, extra) {
+  return '<path d="M' + x + ' ' + y + 'l' + dx + ' ' + dy + 'h' + w + 'l' + (-dx) + ' ' + (-dy) + 'Z" fill="' + top + '"/>' +
+    '<path d="M' + (x + w) + ' ' + y + 'l' + dx + ' ' + dy + 'v' + h + 'l' + (-dx) + ' ' + (-dy) + 'Z" fill="' + side + '"/>' +
+    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + front + '"/>' + (extra || '');
+}
+/** Dimension line with a label, for the units whose thickness is the point. */
+function iDim(x0, x1, y, label) {
+  return '<g stroke="#2b2b2b" stroke-width="0.8"><path d="M' + x0 + ' ' + y + 'H' + x1 + '"/>' +
+    '<path d="M' + x0 + ' ' + (y - 3) + 'v6M' + x1 + ' ' + (y - 3) + 'v6"/></g>' +
+    '<text x="' + f1((x0 + x1) / 2) + '" y="' + (y - 3) + '" font-family="Helvetica,Arial,sans-serif" font-size="8.5" font-weight="700" fill="#2b2b2b" text-anchor="middle">' + label + '</text>';
+}
+const iBg = c => '<rect width="' + ICON_W + '" height="' + ICON_H + '" fill="' + c + '"/>';
+const iGrad = (id, stops, x2, y2) => '<linearGradient id="' + id + '" x1="0" y1="0" x2="' + (x2 === undefined ? 0 : x2) + '" y2="' + (y2 === undefined ? 1 : y2) + '">' +
+  stops.map(([o, c]) => '<stop offset="' + o + '" stop-color="' + c + '"/>').join('') + '</linearGradient>';
+
+/** A hollow clay brick seen in perspective, its perforated end facing the student. */
+function iHollowBrick(r, wFace, cols, label) {
+  const h = 66, dx = 34, dy = -20, x = Math.round((ICON_W - wFace - dx) / 2), y = 28;
+  let holes = '';
+  const hw = (wFace - 8 - (cols - 1) * 4) / cols, rows = 4, hh = (h - 8 - (rows - 1) * 4) / rows;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++)
+    holes += '<rect x="' + f1(x + 4 + i * (hw + 4)) + '" y="' + f1(y + 4 + j * (hh + 4)) + '" width="' + f1(hw) + '" height="' + f1(hh) +
+      '" rx="1.5" fill="#5e2612"/><rect x="' + f1(x + 4 + i * (hw + 4)) + '" y="' + f1(y + 4 + j * (hh + 4)) + '" width="' + f1(hw) + '" height="2" fill="#3f170a"/>';
+  const ribs = Array.from({ length: 5 }, (_, i) => '<path d="M' + f1(x + 6 + i * 7) + ' ' + y + 'l' + dx + ' ' + dy + '" stroke="#b5532c" stroke-width="0.7" opacity="0.5"/>').join('');
+  return iBg('#efe9df') +
+    '<ellipse cx="' + (x + wFace / 2 + dx / 2) + '" cy="' + (y + h + 3) + '" rx="' + (wFace / 2 + dx / 2 + 6) + '" ry="4" fill="#000" opacity="0.12"/>' +
+    iBox(x, y, wFace, h, dx, dy, '#c4643a', '#d98a5f', '#a94f2a', holes) + ribs +
+    iSpeckle(r, 40, ['#d47a4f', '#b45a33'], 0.3, 0.8, 0.7, [x, y, wFace, h]) +
+    iDim(x, x + wFace, y + h + 13, label);
+}
+/** A beam-and-block slab in section: precast joists, ceramic blocks, concrete topping. */
+function iSlab(r, blockH, label) {
+  const top = 16, topping = 16, yb = top + topping, ybot = yb + blockH;
+  let s = iBg('#f3efe7');
+  s += '<rect x="0" y="' + top + '" width="' + ICON_W + '" height="' + topping + '" fill="#a9a8a2"/>' +
+    iSpeckle(r, 110, ['#8f8e88', '#c3c1ba', '#7a7974'], 0.4, 1.4, 0, [0, top, ICON_W, topping]) +
+    '<path d="M0 ' + (top + 9) + 'H' + ICON_W + '" stroke="#5a4636" stroke-width="1" stroke-dasharray="3 2"/>';
+  const joists = [6, 80, 154];
+  const blocks = [[14, 72], [88, 146]];
+  blocks.forEach(([a, b]) => {
+    s += '<rect x="' + a + '" y="' + yb + '" width="' + (b - a) + '" height="' + blockH + '" fill="#c4643a"/>';
+    const rows = blockH > 50 ? 3 : 2, cols = 3, gw = (b - a - 4 * 4) / cols, gh = (blockH - (rows + 1) * 4) / rows;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++)
+      s += '<rect x="' + f1(a + 4 + i * (gw + 4)) + '" y="' + f1(yb + 4 + j * (gh + 4)) + '" width="' + f1(gw) + '" height="' + f1(gh) + '" rx="1.5" fill="#6a2c15"/>';
+  });
+  joists.forEach(c => {
+    s += '<path d="M' + (c - 4) + ' ' + yb + 'h8v' + (blockH - 9) + 'h4v9h-16v-9h4Z" fill="#9b9a94"/>' +
+      '<circle cx="' + (c - 3) + '" cy="' + (ybot - 4.5) + '" r="1.6" fill="#4b3a2c"/><circle cx="' + (c + 3) + '" cy="' + (ybot - 4.5) + '" r="1.6" fill="#4b3a2c"/>';
+  });
+  s += '<rect x="0" y="' + ybot + '" width="' + ICON_W + '" height="3" fill="#e9e5dc"/>';
+  return s + iDimV(144, top, ybot + 3, label);
+}
+function iDimV(x, y0, y1, label) {
+  return '<g stroke="#2b2b2b" stroke-width="0.8"><path d="M' + x + ' ' + y0 + 'V' + y1 + 'M' + (x - 3) + ' ' + y0 + 'h6M' + (x - 3) + ' ' + y1 + 'h6"/></g>' +
+    '<rect x="' + (x - 34) + '" y="' + f1((y0 + y1) / 2 - 7) + '" width="30" height="12" rx="2" fill="#fff" opacity="0.85"/>' +
+    '<text x="' + (x - 19) + '" y="' + f1((y0 + y1) / 2 + 2) + '" font-family="Helvetica,Arial,sans-serif" font-size="8.5" font-weight="700" fill="#2b2b2b" text-anchor="middle">' + label + '</text>';
+}
+/** Running-bond wall of units. */
+function iWall(r, uw, uh, joint, mortar, cols, speck) {
+  let s = iBg(mortar);
+  for (let row = 0, y = 0; y < ICON_H; row++, y += uh + joint) {
+    for (let x = (row % 2 ? -uw / 2 : 0); x < ICON_W; x += uw + joint) {
+      s += '<rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + uw + '" height="' + uh + '" fill="' + pick(r, cols) + '"/>';
+      if (speck) s += iSpeckle(r, speck[0], speck[1], speck[2], speck[3], speck[4], [x, y, uw, uh]);
+    }
+  }
+  return s;
+}
+
+const MAT_ICON_DRAW = {
+  betao: r => iBg('#a8a7a1') + iMottle(r, 18, ['#9a9993', '#b7b6b0'], 0.5, 10, 30) +
+    iGrains(r, 150, ['#8c8a84', '#c4c1b8', '#77756f', '#d2cdc2', '#9b968c'], 1, 3.4) +
+    '<rect x="16" y="14" width="128" height="84" rx="8" fill="none" stroke="#4a3b30" stroke-width="2.4"/>' +
+    [[26, 24], [134, 24], [26, 88], [62, 88], [98, 88], [134, 88]].map(([x, y]) =>
+      '<circle cx="' + x + '" cy="' + y + '" r="6.4" fill="#5c4637"/><circle cx="' + x + '" cy="' + y + '" r="6.4" fill="none" stroke="#3a2c22" stroke-width="1.4" stroke-dasharray="2 1.6"/>' +
+      '<circle cx="' + (x - 1.8) + '" cy="' + (y - 1.8) + '" r="1.8" fill="#8a6c55"/>').join(''),
+  lajealig: r => iSlab(r, 52, '22 cm'),
+  lajealig27: r => iSlab(r, 66, '27 cm'),
+  aco: r => {
+    const off = [26, -16];
+    const P = [[20, 30], [112, 30], [112, 41], [71, 41], [71, 89], [112, 89], [112, 100], [20, 100], [20, 89], [61, 89], [61, 41], [20, 41]];
+    const pts = a => a.map(p => p.join(',')).join(' ');
+    const back = P.map(([x, y]) => [x + off[0], y + off[1]]);
+    const quad = (a, b, c) => '<polygon points="' + pts([P[a], P[b], [P[b][0] + off[0], P[b][1] + off[1]], [P[a][0] + off[0], P[a][1] + off[1]]]) + '" fill="' + c + '"/>';
+    return '<defs>' + iGrad('st', [[0, '#c9d0d6'], [0.5, '#8d98a2'], [1, '#6c7780']], 1, 1) + iGrad('sf', [[0, '#a7b0b8'], [1, '#78838c']]) + '</defs>' +
+      iBg('#eef0f1') + '<ellipse cx="80" cy="103" rx="66" ry="5" fill="#000" opacity="0.12"/>' +
+      '<polygon points="' + pts(back) + '" fill="#5d666e"/>' +
+      quad(8, 9, '#b3bcc3') + quad(4, 5, '#b3bcc3') + quad(3, 4, '#6f7a83') + quad(5, 6, '#66717a') +
+      quad(0, 1, '#d5dbe0') + quad(1, 2, '#727d86') +
+      '<polygon points="' + pts(P) + '" fill="url(#st)"/>' +
+      '<path d="M20 30H112M20 89H61M71 89H112" stroke="#eef2f5" stroke-width="1" opacity="0.8"/>' +
+      iSpeckle(r, 30, ['#5b646c', '#b8c0c7'], 0.3, 0.9, 0.6, [20, 30, 92, 70]);
+  },
+  madeirae: r => {
+    let s = iBg('#e6c793');
+    [0, 38, 76].forEach((y, i) => {
+      s += '<rect x="0" y="' + y + '" width="' + ICON_W + '" height="36" fill="' + ['#e9cc98', '#e2c088', '#ebd19f'][i] + '"/>' +
+        iGrain(r, y + 2, y + 34, 5, '#b98a52', 1.1, 2.2) + '<rect x="0" y="' + (y + 36) + '" width="' + ICON_W + '" height="2" fill="#a9824f"/>';
+    });
+    return s + '<ellipse cx="54" cy="56" rx="7" ry="5" fill="#9a6a38"/><ellipse cx="54" cy="56" rx="3.5" ry="2.4" fill="#6e4520"/>' +
+      '<ellipse cx="54" cy="56" rx="11" ry="8" fill="none" stroke="#b98a52" stroke-width="1" opacity="0.7"/>' +
+      '<ellipse cx="122" cy="18" rx="4.5" ry="3.4" fill="#9a6a38"/>';
+  },
+  madeirad: r => {
+    let s = iBg('#7d4f2e');
+    [0, 28, 56, 84].forEach((y, i) => {
+      s += '<rect x="0" y="' + y + '" width="' + ICON_W + '" height="27" fill="' + ['#83532f', '#764826', '#8c5b36', '#7a4c2b'][i] + '"/>' +
+        iGrain(r, y + 1, y + 26, 2.6, '#55311a', 0.8, 1.2) +
+        iSpeckle(r, 14, ['#a87650'], 0.3, 0.7, 0.6, [0, y, ICON_W, 27]) +
+        '<rect x="0" y="' + (y + 27) + '" width="' + ICON_W + '" height="1" fill="#3e2412"/>';
+    });
+    return s + '<path d="M0 0H160V112H0Z" fill="#fff" opacity="0.05"/>';
+  },
+  tijolo11: r => iHollowBrick(r, 44, 2, '11 cm'),
+  tijolo15: r => iHollowBrick(r, 58, 3, '15 cm'),
+  tijolo22: r => iHollowBrick(r, 80, 4, '22 cm'),
+  tijolom: r => iWall(r, 38, 15, 3, '#d6cdbd', ['#b4522f', '#a8482a', '#bf5d36', '#9e4426', '#b85a32'],
+    [10, ['#8e3a1f', '#cd6f45'], 0.3, 0.9, 0.7]),
+  blococ: r => {
+    const x = 18, y = 40, w = 100, h = 56, dx = 24, dy = -26;
+    const cell = (cx) => '<path d="M' + (cx + 4) + ' ' + (y - 3) + 'l' + f1(dx * 0.75) + ' ' + f1(dy * 0.75) + 'h34l' + f1(-dx * 0.75) + ' ' + f1(-dy * 0.75) + 'Z" fill="#4c4c49"/>';
+    return iBg('#eceae6') + '<ellipse cx="78" cy="99" rx="66" ry="4" fill="#000" opacity="0.12"/>' +
+      iBox(x, y, w, h, dx, dy, '#9e9d98', '#bdbcb7', '#83827d',
+        iSpeckle(r, 160, ['#7f7e79', '#c2c0ba', '#6d6c68'], 0.4, 1.2, 0, [x, y, w, h])) +
+      cell(x + 6) + cell(x + 52) +
+      iSpeckle(r, 50, ['#8d8c87', '#a9a8a3'], 0.3, 0.9, 0, [x + dx, y + dy, w, -dy]) +
+      iDim(x, x + w, y + h + 12, '20 cm');
+  },
+  betaocel: r => iWall(r, 76, 30, 1.5, '#cfccc4', ['#e7e5df', '#e2e0d9', '#eae8e2'],
+    [70, ['#c6c2b8', '#d3cfc6', '#b9b5ab'], 0.4, 1.3, 0]),
+  pedrag: r => iBg('#b3b1ad') + iGrains(r, 260, ['#e9e5dd', '#d9d4ca', '#8e8c88', '#a29f99', '#c7b9ae'], 1.2, 4) +
+    iGrains(r, 90, ['#2a2a2a', '#3a3836', '#1d1d1d'], 0.6, 1.8) + iSpeckle(r, 40, ['#fff'], 0.3, 0.8, 0.6),
+  pedrac: r => {
+    let s = iBg('#e2d4b4') + iMottle(r, 30, ['#d6c59f', '#ece1c6', '#d9caa6'], 0.6, 8, 28) +
+      iSpeckle(r, 120, ['#c9b78f', '#bca97f', '#f1e9d6'], 0.3, 1, 0);
+    for (let i = 0; i < 9; i++) {
+      const x = r() * 150 + 5, y = r() * 100 + 6, a = 2 + r() * 3;
+      s += '<path d="M' + f1(x - a) + ' ' + f1(y) + 'a' + a + ' ' + a + ' 0 0 1 ' + f1(2 * a) + ' 0" fill="none" stroke="#b9a57a" stroke-width="0.8" opacity="0.7"/>';
+    }
+    return s + '<path d="M0 54H160M70 0V54M118 54V112M28 54V112" stroke="#c7b48c" stroke-width="2"/>' +
+      '<path d="M0 55.5H160" stroke="#f3ead5" stroke-width="0.8"/>';
+  },
+  pedrab: r => {
+    let s = iBg('#414144') + iMottle(r, 25, ['#38383b', '#4b4b4f', '#353437'], 0.7, 8, 24) +
+      iSpeckle(r, 160, ['#5a5a5e', '#2e2e30', '#6b6a6e'], 0.3, 0.9, 0);
+    for (let i = 0; i < 34; i++) {
+      const x = r() * ICON_W, y = r() * ICON_H, rx = 1.2 + r() * 4.2, ry = rx * (0.6 + r() * 0.4);
+      s += '<ellipse cx="' + f1(x) + '" cy="' + f1(y + 0.6) + '" rx="' + f1(rx) + '" ry="' + f1(ry) + '" fill="#6e6d71" opacity="0.7"/>' +
+        '<ellipse cx="' + f1(x) + '" cy="' + f1(y) + '" rx="' + f1(rx) + '" ry="' + f1(ry) + '" fill="#18181a"/>';
+    }
+    return s;
+  },
+  taipa: r => {
+    let s = '', y = 0, i = 0;
+    const cols = ['#b88a59', '#a97c4e', '#c39869', '#b2844f', '#9f7246', '#bd9262'];
+    while (y < ICON_H) {
+      const h = 9 + r() * 7;
+      s += '<rect x="0" y="' + f1(y) + '" width="' + ICON_W + '" height="' + f1(h + 1) + '" fill="' + cols[i % cols.length] + '"/>' +
+        iSpeckle(r, 36, ['#8d633b', '#d1ab7d', '#7a5533', '#c8c0b2'], 0.3, 1.3, 0, [0, y, ICON_W, h]);
+      if (i % 3 === 2) s += '<path d="M0 ' + f1(y + h) + 'H' + ICON_W + '" stroke="#7b5631" stroke-width="1.3"/>';
+      y += h; i++;
+    }
+    return s + iGrains(r, 14, ['#9a948a', '#b8b1a5', '#7d776e'], 1.4, 3) +
+      '<circle cx="40" cy="38" r="2.2" fill="#5a3d22"/><circle cx="120" cy="38" r="2.2" fill="#5a3d22"/><circle cx="80" cy="84" r="2.2" fill="#5a3d22"/>';
+  },
+  eps: r => {
+    let s = iBg('#dcdcd8');
+    for (let row = 0, y = 4; y < ICON_H + 6; row++, y += 7.6)
+      for (let x = (row % 2 ? 4.4 : 0); x < ICON_W + 6; x += 8.8) {
+        const rr = 4.1 + r() * 0.9, cx = x + (r() - 0.5) * 1.6, cy = y + (r() - 0.5) * 1.6;
+        s += '<circle cx="' + f1(cx) + '" cy="' + f1(cy + 0.7) + '" r="' + f1(rr) + '" fill="#bdbdb6"/>' +
+          '<circle cx="' + f1(cx) + '" cy="' + f1(cy) + '" r="' + f1(rr) + '" fill="#f7f7f4" stroke="#b5b5ae" stroke-width="0.5"/>' +
+          '<circle cx="' + f1(cx - 1.2) + '" cy="' + f1(cy - 1.2) + '" r="' + f1(rr * 0.35) + '" fill="#fff"/>';
+      }
+    return s;
+  },
+  xps: r => {
+    const one = (y, light) => iBox(16, y, 112, 22, 26, -18, light ? '#7fb5dc' : '#6ea6d1', '#a9d0ec', '#5b93bf',
+      '<path d="M16 ' + (y + 11) + 'h112" stroke="#5b93bf" stroke-width="0.8" opacity="0.6"/>' +
+      '<rect x="16" y="' + (y + 18) + '" width="112" height="4" fill="#5d97c4"/>');
+    return iBg('#eef1f3') + '<ellipse cx="82" cy="101" rx="64" ry="4" fill="#000" opacity="0.12"/>' +
+      one(72, false) + one(48, true) +
+      '<g opacity="0.55">' + iGrain(r, 34, 46, 3, '#cfe5f5', 0.6, 0.5).replace(/M-2/g, 'M30') + '</g>' +
+      '<text x="70" y="64" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#2f6390" text-anchor="middle" opacity="0.7">XPS</text>';
+  },
+  mw: r => {
+    let s = iBg('#d9be6a') + iMottle(r, 18, ['#e6cf86', '#c8a955'], 0.6, 10, 28);
+    for (let i = 0; i < 120; i++) {
+      const y = r() * ICON_H, ph = r() * 6, a = 1 + r() * 3.5, fr = 0.04 + r() * 0.08;
+      let d = 'M-2 ' + f1(y);
+      for (let x = 0; x <= ICON_W + 4; x += 6) d += 'L' + x + ' ' + f1(y + Math.sin(x * fr + ph) * a);
+      s += '<path d="' + d + '" fill="none" stroke="' + pick(r, ['#f2e2a8', '#b8963f', '#a8873a', '#fff3c4']) + '" stroke-width="' + f1(0.4 + r() * 0.8) + '" opacity="' + f1(0.4 + r() * 0.5) + '"/>';
+    }
+    return s;
+  },
+  pur: r => {
+    const x = 14, y = 46, w = 112, h = 34, dx = 28, dy = -22;
+    return '<defs>' + iGrad('foil', [[0, '#e6e9ec'], [0.5, '#b9c0c6'], [1, '#dde1e4']], 1, 0) + '</defs>' +
+      iBg('#eef0f1') + '<ellipse cx="82" cy="85" rx="66" ry="4" fill="#000" opacity="0.12"/>' +
+      iBox(x, y, w, h, dx, dy, '#efdca0', 'url(#foil)', '#d8c27f',
+        iSpeckle(r, 220, ['#e2cb84', '#f7ebc0', '#d6bd72'], 0.3, 1, 0, [x, y + 3, w, h - 6]) +
+        '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="2.6" fill="#c4cbd0"/>' +
+        '<rect x="' + x + '" y="' + (y + h - 2.6) + '" width="' + w + '" height="2.6" fill="#c4cbd0"/>') +
+      '<path d="M' + (x + 30) + ' ' + y + 'l' + dx + ' ' + dy + 'M' + (x + 70) + ' ' + y + 'l' + dx + ' ' + dy + '" stroke="#9aa3aa" stroke-width="0.8" stroke-dasharray="3 2"/>';
+  },
+  icb: r => iBg('#3e2717') + iGrains(r, 520, ['#5c3a24', '#4a2e1b', '#6f482d', '#33200f', '#7a5235'], 1.6, 3.8) +
+    iSpeckle(r, 60, ['#8c6444'], 0.3, 0.8, 0.6),
+  fibrom: r => {
+    let s = iBg('#ad8452') + iMottle(r, 16, ['#b88f5c', '#9f7646'], 0.6, 10, 26);
+    for (let i = 0; i < 520; i++) {
+      const x = r() * ICON_W, y = r() * ICON_H, a = (r() - 0.5) * 0.9, l = 2 + r() * 6;
+      s += '<path d="M' + f1(x) + ' ' + f1(y) + 'l' + f1(Math.cos(a) * l) + ' ' + f1(Math.sin(a) * l) + '" stroke="' +
+        pick(r, ['#8a6236', '#c9a06b', '#77522c', '#d7b582']) + '" stroke-width="' + f1(0.4 + r() * 0.7) + '" opacity="0.8"/>';
+    }
+    return s;
+  },
+  reboco: r => {
+    let s = iBg('#b9b5ad') + iMottle(r, 22, ['#aeaaa1', '#c5c1b9'], 0.6, 12, 34) +
+      iSpeckle(r, 700, ['#9d998f', '#cfcbc3', '#8b877e', '#e0ddd6'], 0.25, 0.8, 0);
+    for (let i = 0; i < 6; i++) {
+      const x = r() * 140, y = r() * 100;
+      s += '<path d="M' + f1(x) + ' ' + f1(y) + 'q20 -10 40 0" fill="none" stroke="#d4d0c8" stroke-width="2" opacity="0.45"/>';
+    }
+    return s;
+  },
+  estuque: r => {
+    let s = iBg('#efece5') + iMottle(r, 18, ['#f6f4ef', '#e4e0d6'], 0.7, 14, 36);
+    for (let i = 0; i < 12; i++) {
+      const x = r() * 150 - 10, y = r() * 110;
+      s += '<path d="M' + f1(x) + ' ' + f1(y) + 'q' + f1(25 + r() * 20) + ' ' + f1(-8 - r() * 8) + ' ' + f1(55 + r() * 25) + ' ' + f1(r() * 6) +
+        '" fill="none" stroke="' + pick(r, ['#ffffff', '#ddd8cc']) + '" stroke-width="' + f1(1 + r() * 1.6) + '" opacity="0.35"/>';
+    }
+    return s;
+  },
+  gesso: r => {
+    const board = (y, dx) => iBox(14 + dx, y, 104, 9, 30, -20, '#f4f2ec', '#ebe5d4', '#dcd6c6',
+      '<rect x="' + (14 + dx) + '" y="' + y + '" width="104" height="1.4" fill="#d9cfb2"/>' +
+      '<rect x="' + (14 + dx) + '" y="' + (y + 7.6) + '" width="104" height="1.4" fill="#a9a6a0"/>' +
+      iSpeckle(r, 30, ['#e1ddd3'], 0.3, 0.7, 0, [14 + dx, y + 2, 104, 5]));
+    return iBg('#e9ecee') + '<ellipse cx="80" cy="90" rx="66" ry="4" fill="#000" opacity="0.12"/>' +
+      board(76, 0) + board(66, 2) + board(56, -1) +
+      '<path d="M53 56l30 -20M93 56l30 -20" stroke="#c9bf9f" stroke-width="0.8" stroke-dasharray="4 3"/>';
+  },
+  ceramico: r => {
+    let s = iBg('#cfc9be');
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
+      const x = 2 + i * 39.5, y = 2 + j * 36.6;
+      s += '<rect x="' + x + '" y="' + y + '" width="37" height="34" rx="1.2" fill="' + pick(r, ['#f3efe6', '#efe9de', '#f5f1ea']) + '"/>' +
+        '<path d="M' + (x + 4) + ' ' + (y + 30) + 'L' + (x + 30) + ' ' + (y + 4) + '" stroke="#fff" stroke-width="5" opacity="0.55"/>' +
+        '<rect x="' + x + '" y="' + y + '" width="37" height="34" rx="1.2" fill="none" stroke="#e2dbcd" stroke-width="0.8"/>';
+    }
+    return s;
+  },
+  pedran: r => {
+    let s = iBg('#efeae2') + iMottle(r, 20, ['#f7f4ee', '#e6dfd4', '#efe2da'], 0.7, 12, 34);
+    for (let i = 0; i < 7; i++) {
+      let d = 'M' + f1(-10 + r() * 40) + ' ' + f1(-5), x = 0, y = -5;
+      x = -10 + r() * 60;
+      d = 'M' + f1(x) + ' -5';
+      while (y < ICON_H + 5) { x += (r() - 0.35) * 22; y += 10 + r() * 14; d += 'L' + f1(x) + ' ' + f1(y); }
+      s += '<path d="' + d + '" fill="none" stroke="' + pick(r, ['#9c958c', '#b4ada3', '#c9a99a']) + '" stroke-width="' + f1(0.5 + r() * 1.4) + '" opacity="' + f1(0.4 + r() * 0.5) + '" transform="translate(' + f1(i * 22) + ' 0)"/>';
+    }
+    return s + '<path d="M0 0L160 112" stroke="#fff" stroke-width="30" opacity="0.18"/>' +
+      '<path d="M0 74H160" stroke="#d8d1c6" stroke-width="1.6"/>';
+  },
+  soalho: r => {
+    let s = iBg('#9c6b3e');
+    for (let row = 0; row < 6; row++) {
+      const y = row * 18.7, off = r() * 80;
+      for (let x = -off; x < ICON_W; x += 70 + r() * 40) {
+        const w = 70 + r() * 40, c = pick(r, ['#b98653', '#a8743f', '#c49261', '#b07c49']);
+        s += '<rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(w) + '" height="18" fill="' + c + '"/>';
+        s += '<path d="M' + f1(x + w) + ' ' + f1(y) + 'v18" stroke="#6e4524" stroke-width="1"/>';
+      }
+      s += '<g clip-path="none">' + iGrain(r, y + 1, y + 17, 3, '#7c5029', 0.6, 0.8) + '</g>' +
+        '<rect x="0" y="' + f1(y + 18) + '" width="' + ICON_W + '" height="0.9" fill="#5e3a1d"/>';
+    }
+    return s;
+  },
+  betonilha: r => {
+    let s = iBg('#a9a7a1') + iMottle(r, 24, ['#b5b3ad', '#9c9a94', '#aeaca5'], 0.6, 12, 36) +
+      iSpeckle(r, 260, ['#95938d', '#bebcb6'], 0.25, 0.7, 0);
+    for (let i = 0; i < 14; i++) {
+      const x = r() * 160, y = r() * 112, rad = 10 + r() * 22;
+      s += '<path d="M' + f1(x - rad) + ' ' + f1(y) + 'a' + f1(rad * 1.6) + ' ' + f1(rad * 0.35) + ' 0 0 1 ' + f1(rad * 2) + ' 0" fill="none" stroke="#c3c1bb" stroke-width="0.9" opacity="0.28"/>';
+    }
+    return s;
+  },
+  imperm: r => {
+    let s = iBg('#2d2d2d') + iSpeckle(r, 900, ['#4a4a49', '#5e5d5b', '#3a3a39', '#6c6b67'], 0.3, 0.9, 0);
+    s += '<path d="M0 58H160V112H0Z" fill="#262626"/>' + iSpeckle(r, 500, ['#454544', '#585755', '#363635'], 0.3, 0.9, 0, [0, 60, 160, 52]) +
+      '<rect x="0" y="52" width="160" height="8" fill="#1d1d1d"/>' +
+      '<path d="M0 60Q10 63 20 60T40 60T60 60T80 60T100 60T120 60T140 60T160 60" fill="none" stroke="#0f0f0f" stroke-width="2.4"/>' +
+      '<path d="M0 52H160" stroke="#4d4d4b" stroke-width="0.8"/>';
+    return s;
+  },
+  seixo: r => {
+    let s = iBg('#5d5850');
+    for (let i = 0; i < 95; i++) {
+      const x = r() * ICON_W, y = r() * ICON_H, rx = 5 + r() * 6, ry = rx * (0.55 + r() * 0.3), a = r() * 180;
+      const c = pick(r, ['#a9a49a', '#c2bcb0', '#8e8a82', '#b7aa96', '#d0c8b9', '#9b958a']);
+      s += '<g transform="translate(' + f1(x) + ' ' + f1(y) + ') rotate(' + f1(a) + ')">' +
+        '<ellipse rx="' + f1(rx) + '" ry="' + f1(ry) + '" cy="1" fill="#000" opacity="0.25"/>' +
+        '<ellipse rx="' + f1(rx) + '" ry="' + f1(ry) + '" fill="' + c + '"/>' +
+        '<ellipse rx="' + f1(rx * 0.5) + '" ry="' + f1(ry * 0.4) + '" cx="' + f1(-rx * 0.25) + '" cy="' + f1(-ry * 0.3) + '" fill="#fff" opacity="0.25"/></g>';
+    }
+    return s;
+  }
+};
+/** The drawing of a material as an image URL, cached per material. */
+const MAT_ICON_CACHE = {};
+function matIcon(key) {
+  if (MAT_ICON_CACHE[key]) return MAT_ICON_CACHE[key];
+  const draw = MAT_ICON_DRAW[key];
+  if (!draw) return null;
+  let seed = 7;
+  for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + ICON_W + ' ' + ICON_H + '" preserveAspectRatio="xMidYMid slice">' +
+    draw(iconRng(seed)) + '</svg>';
+  return (MAT_ICON_CACHE[key] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+}
 
 /* ------------------------------------------------- v2.7.0: PHOTO EDITOR --
    The photographs above are baked into this file, so the page never calls
@@ -7458,8 +7852,10 @@ function readFileAsDataURL(f) {
   return new Promise((ok, no) => { const r = new FileReader();
     r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(f); });
 }
+const PHOTO_ACCEPT = 'image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp';
+const isImageFile = f => f && (/^image\//.test(f.type) || (!f.type && /\.(jpe?g|png|webp)$/i.test(f.name)));
 async function photoFromFile(f) {
-  if (!f || !/^image\//.test(f.type)) throw new Error(t('That file is not an image.'));
+  if (!isImageFile(f)) throw new Error(t('That file is not an image.'));
   return bakeTile(await loadImage(await readFileAsDataURL(f), false));
 }
 /**
@@ -7476,6 +7872,112 @@ async function photoFromUrl(u) {
   try { return { img: bakeTile(await loadImage(src, true)), linked: false }; } catch (e) {}
   try { await loadImage(src, false); return { img: src, linked: true }; }
   catch (e) { throw new Error(t('That link did not open as an image. On the website, right-click the picture and choose “Copy image address”, then paste that.')); }
+}
+/**
+ * What a browser hands over when a picture is dragged in from another tab:
+ * sometimes a file, usually the dragged <img> as HTML plus the link around it.
+ * Candidates are tried full size first — the image a search result points to
+ * (imgurl=, mediaurl=), the largest srcset entry, the <img> src — then the link.
+ * The page is kept as the source when it differs from the image itself.
+ */
+function dropCandidates(dt) {
+  const out = [], add = u => { u = (u || '').trim(); if (u && out.indexOf(u) < 0) out.push(u); };
+  const links = (dt.getData('text/uri-list') || '').split(/\r?\n/).filter(l => l && l[0] !== '#');
+  const plain = (dt.getData('text/plain') || '').trim();
+  const base = links[0] || location.href;
+  const abs = u => { try { return new URL(u, base).href; } catch (e) { return ''; } };
+  let page = '';
+  [links[0], plain].forEach(u => { try {
+    const q = new URL(u).searchParams; add(q.get('imgurl') || q.get('mediaurl') || '');
+    page = page || q.get('imgrefurl') || q.get('pageurl') || '';
+  } catch (e) {} });
+  const html = dt.getData('text/html');
+  if (html) {
+    const im = new DOMParser().parseFromString(html, 'text/html').querySelector('img');
+    if (im) {
+      const set = (im.getAttribute('srcset') || '').split(',').map(x => x.trim().split(/\s+/))
+        .filter(x => x[0]).sort((a, b) => (parseFloat(b[1]) || 1) - (parseFloat(a[1]) || 1));
+      if (set.length) add(abs(set[0][0]));
+      add(/^data:image\//.test(im.getAttribute('src') || '') ? im.getAttribute('src') : abs(im.getAttribute('src')));
+    }
+  }
+  links.forEach(add);
+  if (/^(https?:|data:image\/)/.test(plain)) add(plain);
+  return { list: out.filter(u => /^(https?:|data:image\/)/i.test(u)), page: safeHref(page || links[0] || plain) };
+}
+async function photoFromDrop(dt) {
+  const f = dt.files && Array.from(dt.files).find(isImageFile);
+  if (f) return { img: await photoFromFile(f), linked: false, page: '' };
+  const c = dropCandidates(dt);
+  if (!c.list.length) throw new Error(t('That drop carried no picture — drag the image itself, not the page.'));
+  let linkedHit = null;
+  for (const u of c.list) {
+    if (/^data:image\//i.test(u)) { try { return { img: bakeTile(await loadImage(u, false)), linked: false, page: c.page }; } catch (e) { continue; } }
+    const src = directImageUrl(u);
+    try { return { img: bakeTile(await loadImage(src, true)), linked: false, page: c.page || u }; } catch (e) {}
+    if (!linkedHit) try { await loadImage(src, false); linkedHit = { img: src, linked: true, page: c.page || u }; } catch (e) {}
+  }
+  if (linkedHit) return linkedHit;
+  throw new Error(t('That picture could not be read. Save it to your computer and drop the file instead.'));
+}
+/* A drag that starts inside the page (a mosaic photo) is not an import. */
+let PHOTO_DRAG_INTERNAL = false;
+document.addEventListener('dragstart', () => { PHOTO_DRAG_INTERNAL = true; });
+document.addEventListener('dragend', () => { PHOTO_DRAG_INTERNAL = false; });
+/* A picture dropped beside a target must not replace the app in the tab. */
+const isTextField = n => n && (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.isContentEditable);
+window.addEventListener('dragover', e => { if (!isTextField(e.target)) e.preventDefault(); });
+window.addEventListener('drop', e => { if (!isTextField(e.target)) e.preventDefault(); });
+
+function pickPhotoFor(key, done) {
+  const inp = el('input', { type:'file', accept:PHOTO_ACCEPT, style:'display:none' });
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; inp.remove(); if (!f) return;
+    try {
+      const img = await photoFromFile(f), prev = PHOTO_EDITS[key] || {};
+      if (setPhoto(key, { img, author:prev.author || '', lic:prev.lic || '', url:prev.url || '', linked:false })) {
+        toast('Photo replaced — add author and licence below.'); done();
+      }
+    } catch (e) { toast(e.message); }
+  });
+  document.body.appendChild(inp); inp.click();
+}
+/** One photograph for one material, picked from disk without opening its panel. */
+function pickPhotoFor(key, done) {
+  const inp = el('input', { type:'file', accept:PHOTO_ACCEPT, style:'display:none' });
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; inp.remove(); if (!f) return;
+    try {
+      const img = await photoFromFile(f), prev = PHOTO_EDITS[key] || {};
+      if (setPhoto(key, { img, author:prev.author || '', lic:prev.lic || '', url:prev.url || '', linked:false })) {
+        toast('Photo replaced — add author and licence below.'); done();
+      }
+    } catch (e) { toast(e.message); }
+  });
+  document.body.appendChild(inp); inp.click();
+}
+/** Any mosaic card takes a dropped picture for its own material. */
+function cardDropTarget(card, key, done) {
+  const on = e => { if (PHOTO_DRAG_INTERNAL) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; card.classList.add('dropon'); };
+  card.addEventListener('dragenter', on);
+  card.addEventListener('dragover', on);
+  card.addEventListener('dragleave', e => { if (!card.contains(e.relatedTarget)) card.classList.remove('dropon'); });
+  card.addEventListener('drop', async e => {
+    card.classList.remove('dropon');
+    if (PHOTO_DRAG_INTERNAL) return;
+    e.preventDefault(); e.stopPropagation();
+    card.classList.add('busy');
+    try {
+      const r = await photoFromDrop(e.dataTransfer);
+      const prev = PHOTO_EDITS[key] || {};
+      if (!setPhoto(key, { img:r.img, author:prev.author || '', lic:prev.lic || '', url:r.page || '', linked:r.linked })) return;
+      PHOTO_EDIT_MODE = true;
+      try { localStorage.setItem('cona-photo-edit', '1'); } catch (er) {}
+      toast(r.linked ? 'Kept as a link: this site does not allow embedding, so the photo shows only while online.'
+                     : 'Photo replaced — add author and licence below.');
+      done();
+    } catch (er) { card.classList.remove('busy'); toast(er.message); }
+  });
 }
 /* v2.54.0: a photo change travels as files — photos/<material>.jpg and the
    credits in photos.js — and goes to the students only after review:
@@ -7506,8 +8008,9 @@ function photoManifest(stamp) {
 function photosJsSource(man) {
   const keys = Object.keys(man);
   return ['/* Construction Advisor PT — the material photographs.',
-    '   One entry per material of the library: the image file under photos/ and',
-    '   its credit (author, licence, source page). Loaded by index.html before the',
+    '   One entry per photographed material: the image file under photos/ and',
+    '   its credit (author, licence, source page). A material with no entry is',
+    '   shown by its drawing (MAT_ICON_DRAW in index.html). Loaded by index.html before the',
     '   app; keep this file and the photos/ folder next to index.html. The photo',
     '   editor (Materials → Edit photos) writes this same format. */',
     'window.MAT_PHOTO_DATA = {']
@@ -7683,7 +8186,7 @@ function photoEditorBar(rerender) {
   const btn = (label, fn, cls) => el('button', { class:'btn' + (cls ? ' ' + cls : ''), text:label, onclick:fn });
   return el('div', { class:'photobar' }, [
     el('div', { class:'photobar-head', html:'<b>' + t('Photo editor') + '</b> · ' +
-      t('Pick a material below, then upload, drop, paste or link its photograph.') +
+      t('One material at a time: press Upload JPEG on its card, or drag a picture onto it from a folder or another browser tab. Click a card to paste, link or credit its photograph.') +
       ' <span class="photobar-n">' + n + ' ' + t('replaced in this browser') + '</span>' }),
     el('p', { class:'photobar-note', text:t('Replacements stay in this browser until reviewed: download them as a zip for the repository, or send them for review on GitHub. Students see them only after that. Show the raw construction material — the brick, the board, the stone — not a finished building.') }),
     el('div', { class:'photobar-acts' }, [
@@ -7720,7 +8223,7 @@ function photoEditorFor(key, rerender) {
     say('Reading…');
     try { commit(await photoFromFile(f), false); } catch (e) { say(e.message, true); }
   };
-  const fileIn = el('input', { type:'file', accept:'image/*', style:'display:none' });
+  const fileIn = el('input', { type:'file', accept:PHOTO_ACCEPT, style:'display:none' });
   fileIn.addEventListener('change', () => fileIn.files[0] && takeFile(fileIn.files[0]));
   const drop = el('div', { class:'photodrop', tabindex:'0', role:'button',
     text:t('Drop an image here — straight from a web page, no saving needed — or click to choose a file, or paste one (Ctrl/⌘ + V)') });
@@ -7731,29 +8234,15 @@ function photoEditorFor(key, rerender) {
   /* A drag from a web page carries no file — it carries the picture as
      HTML and/or its address as text — so read those before concluding
      there is nothing to take. Nothing ever needs saving to disk first. */
-  drop.addEventListener('drop', e => {
-    e.preventDefault(); drop.classList.remove('on');
-    const dt = e.dataTransfer;
-    const f = dt.files && dt.files[0];
-    if (f) return takeFile(f);
-    const html = dt.getData('text/html');
-    if (html) {
-      try {
-        const src = (new DOMParser().parseFromString(html, 'text/html')
-          .querySelector('img') || {}).src || '';
-        if (/^data:image\//i.test(src)) {
-          say('Reading…');
-          return fetch(src).then(r => r.blob())
-            .then(b => takeFile(new File([b], 'dropped-image', { type:b.type || 'image/png' })))
-            .catch(() => say('That drop carried no picture — drag the image itself, not the page.', true));
-        }
-        if (/^https?:\/\//i.test(src)) { fLink.value = src; return useLink(); }
-      } catch (err) { /* fall through to the text address */ }
-    }
-    const u = (dt.getData('text/uri-list') || dt.getData('text/plain') || '')
-      .split('\n').map(s => s.trim()).find(s => /^https?:\/\//i.test(s));
-    if (u) { fLink.value = u; return useLink(); }
-    say('That drop carried no picture — drag the image itself, not the page.', true);
+  drop.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove('on');
+    if (PHOTO_DRAG_INTERNAL) return;
+    say('Reading…');
+    try {
+      const r = await photoFromDrop(e.dataTransfer);
+      commit(r.img, r.linked, r.page);
+      if (r.linked) toast('Kept as a link: this site does not allow embedding, so the photo shows only while online.');
+    } catch (er) { say(er.message, true); }
   });
   drop.addEventListener('paste', e => {
     const it = Array.from(e.clipboardData.items || []).find(i => /^image\//.test(i.type));
@@ -7781,7 +8270,7 @@ function photoEditorFor(key, rerender) {
   box.appendChild(el('div', { class:'photoedit-row' }, [fLink, el('button', { class:'btn', text:'Use link', onclick:useLink })]));
   box.appendChild(el('div', { class:'photoedit-row' }, [fAuthor, fLic, fPage]));
   box.appendChild(el('p', { class:'photobar-note', text:t('Cropped from the centre to the mosaic proportion. Best: the material alone, filling the frame, even light — like Lightweight concrete.') }));
-  if (PHOTO_EDITS[key]) box.appendChild(el('button', { class:'btn', text:'Back to the original photograph',
+  if (PHOTO_EDITS[key]) box.appendChild(el('button', { class:'btn', text:MAT_PHOTO_BASE[key] ? 'Back to the original photograph' : 'Back to the drawing',
     onclick:() => { revertPhoto(key); rerender(); } }));
   box.appendChild(el('button', { class:'btn', text:'Copy photograph',
     onclick:() => copyPhoto(MAT_PHOTO[key] || {}, say) }));
@@ -7905,7 +8394,7 @@ function buildMaterials(host) {
     [Z.wz, fmt(limR, 2), fmt(limW, 2), fmt(limF, 2), fmt(limG, 2), Z.sz, fmt(gtotMax(Z, 'fraca'), 2), fmt(gtotMax(Z, 'media'), 2)]));
 
   host.appendChild(hint('mat-photos',
-    'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.'));
+    'Each material is drawn as the matter itself — texture, unit or section — made for this app; a photograph appears where one is credited. Colours group families.'));
   const box = el('div');
   host.appendChild(box);
   let filter = 'all', sel = null, wantScroll = false;
@@ -7933,11 +8422,19 @@ function buildMaterials(host) {
         + (PHOTO_EDIT_MODE && PHOTO_EDITS[m.key] ? ' edited' : ''),
         onclick:() => { sel = (sel === m.key ? null : m.key); wantScroll = sel !== null; rerender(); } });
       const ph = MAT_PHOTO[m.key];
-      if (ph) card.appendChild(el('img', { class:'mphoto', src:ph.img, alt:m.name, loading:'lazy' }));
+      const pic = ph ? ph.img : matIcon(m.key);
+      if (pic) card.appendChild(el('img', { class:'mphoto' + (ph ? '' : ' drawn'), src:pic, alt:m.name, loading:'lazy' }));
       card.appendChild(el('span', { class:'fambar', style:'background:' + materialColor({ key:m.key }) }));
       card.appendChild(el('span', { class:'mname', text:m.name }));
       card.appendChild(el('span', { class:'msub', text:sub }));
-      grid.appendChild(card);
+      card.setAttribute('data-drop', t('Drop to replace the photo'));
+      cardDropTarget(card, m.key, () => { sel = m.key; wantScroll = true; rerender(); });
+      if (PHOTO_EDIT_MODE) {
+        const cell = el('div', { class:'mcell' }, [card, el('button', { class:'mupload', type:'button',
+          text:'Upload JPEG', title:t('Choose a JPEG (or PNG, WebP) for:') + ' ' + t(m.name),
+          onclick:() => pickPhotoFor(m.key, () => { sel = m.key; wantScroll = true; rerender(); }) })]);
+        grid.appendChild(cell);
+      } else grid.appendChild(card);
     });
     frag.appendChild(grid);
     if (sel && MAT[sel]) {
@@ -7952,6 +8449,9 @@ function buildMaterials(host) {
         d.appendChild(el('img', { class:'dphoto', src:P.img, alt:M.name, loading:'lazy' }));
         const credit = photoCreditHtml(P);
         if (credit) { const c = el('p', { class:'photocredit' }); c.innerHTML = credit; d.appendChild(c); }
+      } else if (matIcon(sel)) {
+        d.appendChild(el('img', { class:'dphoto drawn', src:matIcon(sel), alt:M.name }));
+        d.appendChild(el('p', { class:'photocredit', text:'Drawing made for this app — the matter, not a particular product.' }));
       }
       if (PHOTO_EDIT_MODE) d.appendChild(photoEditorFor(sel, rerender));
       d.appendChild(el('p', { class:'costlink', html:'<b>' + t('Traditionally available in:') + '</b> ' +
@@ -10159,7 +10659,7 @@ Object.assign(PT, {
   'Photo:': 'Foto:',
   'Traditionally available in:': 'Com disponibilidade tradicional em:',
   'Availability': 'Disponibilidade',
-  'Photographs: Wikimedia Commons contributors, under free licences — author and licence ride with each material below, on the file page behind every image. Colours group families; the photograph shows the matter.': 'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.',
+  'Each material is drawn as the matter itself — texture, unit or section — made for this app; a photograph appears where one is credited. Colours group families.': 'Cada material é desenhado como a própria matéria — textura, unidade ou secção — feito para esta aplicação; aparece uma fotografia onde houver crédito. As cores agrupam famílias.',
   'Systems and producers:': 'Sistemas e produtores:',
   'Manufacturers index at the Gerador de Preços': 'Índice de fabricantes do Gerador de Preços',
   'confirm dealers near the site.': 'confirmar distribuidores junto ao local.',
@@ -10167,7 +10667,7 @@ Object.assign(PT, {
   'validate with local dealers before specifying.': 'validar com distribuidores locais antes de especificar.'
 });
 PT_HINT['mat-photos'] =
-  'Fotografias: contribuidores da Wikimedia Commons, sob licenças livres — autor e licença acompanham cada material abaixo, na página do ficheiro por detrás de cada imagem. As cores agrupam famílias; a fotografia mostra a matéria.';
+  'Cada material é desenhado como a própria matéria — textura, unidade ou secção — feito para esta aplicação; aparece uma fotografia onde houver crédito. As cores agrupam famílias.';
 
 /* v2.4.0: English–Portuguese for the suppliers directory. */
 Object.assign(PT, {
@@ -10430,6 +10930,18 @@ Object.assign(PT, {
   'Choose this app’s index.html to write the photographs into.': 'Escolha o index.html desta aplicação para nele escrever as fotografias.',
   '{} photographs imported.': '{} fotografias importadas.',
   'That file is not a photo pack.': 'Esse ficheiro não é um pacote de fotografias.'
+});
+
+/* v2.56.0: English–Portuguese for the drawings and one-by-one photo editing. */
+Object.assign(PT, {
+  'Drop to replace the photo': 'Largue para substituir a fotografia',
+  'Photo replaced — add author and licence below.': 'Fotografia substituída — indique autor e licença abaixo.',
+  'That picture could not be read. Save it to your computer and drop the file instead.': 'Não foi possível ler essa imagem. Guarde-a no computador e largue o ficheiro.',
+  'Upload JPEG': 'Carregar JPEG',
+  'Choose a JPEG (or PNG, WebP) for:': 'Escolha um JPEG (ou PNG, WebP) para:',
+  'One material at a time: press Upload JPEG on its card, or drag a picture onto it from a folder or another browser tab. Click a card to paste, link or credit its photograph.': 'Um material de cada vez: carregue em Carregar JPEG no seu cartão, ou arraste uma imagem para ele a partir de uma pasta ou de outro separador. Clique num cartão para colar, ligar ou creditar a sua fotografia.',
+  'Drawing made for this app — the matter, not a particular product.': 'Desenho feito para esta aplicação — a matéria, não um produto concreto.',
+  'Back to the drawing': 'Voltar ao desenho'
 });
 
 /* PT v2.0.0: the boot above ran before this dictionary existed, so static
