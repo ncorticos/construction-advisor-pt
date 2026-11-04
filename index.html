@@ -656,7 +656,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.54.0',
+  version:     '2.55.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4260,6 +4260,8 @@ function buildWindows(host) {
     frag.appendChild(hint('win-operation',
       'This limit does not move with the type of intervention you set up with. Anexo I of the Portaria states its requirements for &quot;edifícios novos ou renovados&quot; throughout — Tabelas 1 to 8 give one figure for a new building and a major renovation alike, and no threshold anywhere in this application splits on your answer. What it does change is what is worth showing you: the Tabela 25 and 26 default build-ups appear only on a major renovation, because only then is there an existing element to survey, and the reduced route for glazing renewed outside a major renovation appears only on the other setting.'));
 
+    buildWinAreasByOrientation(frag, S, rerender);
+
     /* --- the opening, to scale ---------------------------------------------
        Fg is an area fraction, not a stack of layers, so this is an elevation
        rather than a cross-section: the frame's real share of the opening —
@@ -5621,7 +5623,8 @@ function buildShading(host) {
 const AA_HANDOFF_KEY = 'arca-handoff-construction';
 const AA_ORDER = ['N','NE','E','SE','S','SW','W','NW'];
 const AA_STATE = { present:false, savedAt:null, fromApp:null, fromVer:null,
-  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[], study:null };
+  building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[], study:null,
+  glazO:null };
 /* v2.50.0: the way back. The Architecture Advisor study that came with the
    hand-off is kept (and saved with this assessment), so the student can
    reopen that same design there; it travels in the address, as it came. */
@@ -6656,8 +6659,22 @@ function aaApplyMeta(data) {
      windows; clerestory and roof lights carry no orientation here). A file
      of the student's own that already holds areas keeps them — this only
      runs on a handoff, which always follows a reset. */
+  /* v2.55.0: the glazing split the sender already packs per true compass
+     point in BUDGET_STATE.win — facade and clerestory windows, glazed doors
+     and roof windows apart (roof windows on a flat roof bucket F). Older
+     hand-offs without it fall back to the four plan facades. */
+  const bw = bs.win || {}, num = v => +v || 0;
+  const z8 = () => { const o = {}; AA_ORDER.forEach(c => { o[c] = 0; }); return o; };
+  const gO = { win:z8(), doors:z8(), sky:z8(), skyF:0 };
+  if (bw.byOrientation && typeof bw.byOrientation === 'object') {
+    const sk = (bw.skylights && bw.skylights.byOrientation) || {}, dO = (bw.doors && bw.doors.byOrientation) || {};
+    AA_ORDER.forEach(c => { gO.sky[c] = r2(num(sk[c])); gO.doors[c] = r2(num(dO[c]));
+      gO.win[c] = r2(Math.max(0, num(bw.byOrientation[c]) - num(sk[c]))); });
+    gO.skyF = r2(num(sk.F));
+  } else Object.keys(fac).forEach(c => { gO.win[c] = fac[c].glass; gO.doors[c] = fac[c].doors; });
+  AA_STATE.glazO = gO;
   const wa = {};
-  Object.keys(fac).forEach(c => { const b = fac[c], g = b.glass + b.doors;
+  AA_ORDER.forEach(c => { const g = gO.win[c] + gO.doors[c];
     if (g > 0) wa[c] = Math.round(g * 10) / 10; });
   WIN_STATE.areas = wa;
   return true;
@@ -6672,6 +6689,7 @@ function aaClear() {
   AA_STATE.present = false; AA_STATE.savedAt = null; AA_STATE.fromApp = null; AA_STATE.fromVer = null;
   AA_STATE.building = null; AA_STATE.facades = {}; AA_STATE.clerestory = null;
   AA_STATE.roofWindows = null; AA_STATE.roof = null; AA_STATE.floor = null; AA_STATE.budgetKeys = [];
+  AA_STATE.glazO = null;
 }
 function aaTotals() {
   const o = { wall:0, glass:0, doors:0, gel:0 };
@@ -6733,6 +6751,65 @@ function buildAaCard(host) {
   card.appendChild(hide);
   host.appendChild(card);
 }
+/** v2.55.0: glazing areas per true orientation on the Windows tab, right
+ *  under the window's own figures — what the Architecture Advisor measured
+ *  (windows, glazed doors, roof windows apart), or what the student typed per
+ *  orientation below when no study came with this assessment. A row picks the
+ *  orientation for "Suggested glazing for this window". */
+function buildWinAreasByOrientation(frag, S, rerender) {
+  const G = AA_STATE.present ? AA_STATE.glazO : null;
+  const oi = clamp(S.ori, 0, 7);
+  const r2 = v => Math.round(v * 100) / 100;
+  const dash = v => v > 0 ? fmt(v, 1) : '—';
+  const pick = (tbl, n) => tbl.querySelectorAll('tbody tr').forEach((tr, i) => {
+    if (i >= n) return;
+    tr.style.cursor = 'pointer';
+    tr.title = t('Use this orientation in Suggested glazing below');
+    tr.addEventListener('click', () => { S.ori = i; rerender(); });
+  });
+  if (G) {
+    const tot = c => G.win[c] + G.doors[c] + G.sky[c];
+    const all = AA_ORDER.reduce((a, c) => a + tot(c), 0) + G.skyF;
+    const sumK = k => AA_ORDER.reduce((a, c) => a + G[k][c], 0);
+    const share = v => all > 0 && v > 0 ? fmt(100 * v / all, 0) + ' %' : '—';
+    const hasSky = sumK('sky') + G.skyF > 0;
+    const rows = AA_ORDER.map((c, i) => ({ cls: i === oi ? 'hl' : null,
+      cells: [COMPASS8[i], dash(G.win[c]), dash(G.doors[c])].concat(hasSky ? [dash(G.sky[c])] : [])
+        .concat(['<b>' + dash(tot(c)) + '</b>', share(tot(c))]) }));
+    if (G.skyF > 0) rows.push({ cells: [t('Horizontal (flat roof)'), '—', '—', dash(G.skyF), '<b>' + dash(G.skyF) + '</b>', share(G.skyF)] });
+    rows.push({ cls:'total', cells: [t('Total'), fmt(sumK('win'), 1), fmt(sumK('doors'), 1)]
+      .concat(hasSky ? [fmt(sumK('sky') + G.skyF, 1)] : []).concat([fmt(all, 1), all > 0 ? '100 %' : '—']) });
+    frag.appendChild(section('Glazing areas by orientation',
+      'From the Architecture Advisor, per true solar orientation · m²', 'window-areas-orientation',
+      () => csvRows([['Orientation', 'Facade windows (m2)', 'Glazed doors (m2)', 'Roof windows (m2)', 'Total (m2)', 'Share (%)']]
+        .concat(AA_ORDER.map(c => [c, G.win[c], G.doors[c], G.sky[c], r2(tot(c)), all > 0 ? Math.round(100 * tot(c) / all) : 0]))
+        .concat(G.skyF > 0 ? [['Horizontal', 0, 0, G.skyF, G.skyF, Math.round(100 * G.skyF / all)]] : [])
+        .concat([['Total', r2(sumK('win')), r2(sumK('doors')), r2(sumK('sky') + G.skyF), r2(all), 100]]))));
+    const tbl = dataTable([t('Orientation'), t('Facade windows'), t('Glazed doors')].concat(hasSky ? [t('Roof windows')] : [])
+      .concat([t('Total'), t('Share')]), rows, [0]);
+    pick(tbl, 8);
+    frag.appendChild(tbl);
+    frag.appendChild(hint('win-areas-orientation',
+      'Areas are the glazed openings measured on the Architecture Advisor model, grouped by the true solar orientation each one faces — the building’s rotation is already resolved, so a façade turned 30° off south lands on the nearest of the eight points. Roof windows count with the slope they sit on; on a flat roof they are horizontal. Click a row to carry that orientation into <b>Suggested glazing for this window</b> below.'));
+    return;
+  }
+  const A = S.areas || {};
+  const typed = AA_ORDER.filter(c => A[c] > 0);
+  frag.appendChild(section('Glazing areas by orientation', 'Per true solar orientation · m²', 'window-areas-orientation',
+    typed.length ? () => csvRows([['Orientation', 'Glazing area (m2)']].concat(AA_ORDER.map(c => [c, A[c] > 0 ? A[c] : 0]))) : null));
+  if (typed.length) {
+    const all = typed.reduce((a, c) => a + A[c], 0);
+    const rows = AA_ORDER.map((c, i) => ({ cls: i === oi ? 'hl' : null,
+      cells: [COMPASS8[i], dash(A[c] || 0), A[c] > 0 ? fmt(100 * A[c] / all, 0) + ' %' : '—'] }));
+    rows.push({ cls:'total', cells:[t('Total'), fmt(all, 1), '100 %'] });
+    const tbl = dataTable([t('Orientation'), t('Glazing area'), t('Share')], rows, [0]);
+    pick(tbl, 8);
+    frag.appendChild(tbl);
+  }
+  frag.appendChild(hint('win-areas-none',
+    'No Architecture Advisor study came with this assessment. Open your design there and use <b>Continue to Construction Advisor</b>: the glazed areas arrive split by orientation — N, NE, E, SE, S, SW, W, NW — and fill this table. Until then, the areas you type under <b>Suggested glazing for this window</b> appear here.'));
+}
+
 /** Glazing per true orientation, for scale, at the top of Solar protections:
  *  devices are still chosen per opening — this only shows where the glass is. */
 function buildAaSolarRef(frag) {
@@ -10272,6 +10349,25 @@ Object.assign(PT, {
   'Venetian blind, thin slats': 'Estore veneziano de lâminas delgadas'
 });
 /* v2.7.0: English–Portuguese for the photo editor. */
+/* v2.55.0: glazing areas by orientation on the Windows tab */
+Object.assign(PT, {
+  "Glazing areas by orientation": "Áreas envidraçadas por orientação",
+  "From the Architecture Advisor, per true solar orientation · m²": "Do Architecture Advisor, por orientação solar real · m²",
+  "Per true solar orientation · m²": "Por orientação solar real · m²",
+  "Facade windows": "Janelas de fachada",
+  "Glazed doors": "Portas envidraçadas",
+  "Roof windows": "Janelas de cobertura",
+  "Share": "Percentagem",
+  "Glazing area": "Área envidraçada",
+  "Horizontal (flat roof)": "Horizontal (cobertura plana)",
+  "Use this orientation in Suggested glazing below": "Usar esta orientação em Vidro sugerido, abaixo"
+});
+Object.assign(PT_HINT, {
+  'win-areas-orientation':
+    'As áreas são os vãos envidraçados medidos no modelo do Architecture Advisor, agrupados pela orientação solar real para que cada um está virado — a rotação do edifício já está resolvida, pelo que uma fachada rodada 30° em relação a sul fica no mais próximo dos oito rumos. As janelas de cobertura contam com a vertente em que assentam; numa cobertura plana são horizontais. Clique numa linha para levar essa orientação para <b>Vidro sugerido para este vão</b>, abaixo.',
+  'win-areas-none':
+    'Esta avaliação não trouxe nenhum estudo do Architecture Advisor. Abra lá o seu projeto e use <b>Continuar para o Construction Advisor</b>: as áreas envidraçadas chegam divididas por orientação — N, NE, E, SE, S, SO, O, NO — e preenchem esta tabela. Até lá, aparecem aqui as áreas que escrever em <b>Vidro sugerido para este vão</b>.'
+});
 Object.assign(PT, {
   'Edit photos': 'Editar fotografias',
   'Replace a material photograph by upload or link': 'Substituir a fotografia de um material por carregamento ou ligação',
