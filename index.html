@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.56.0',
+  version:     '2.57.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -924,11 +924,17 @@ const DOY_MON = (() => { const a = []; MDAYS.forEach((n, m) => { for (let d = 0;
 function facadeSun(lat, lon) {
   const tz = lon / 15, monthly = [];
   for (let m = 0; m < 12; m++) monthly.push([0,0,0,0,0,0,0,0]);
+  /* v2.57.0: the horizontal plane — the roof, the açoteia, the ground: its hours of sun and its clear-sky
+     irradiation, beam through an air mass (Meinel: 1361 · 0.7^(AM^0.678) W/m²) plus a tenth of it diffuse,
+     in kWh/m² — the same figures as Architecture Advisor PT */
+  const hH = new Array(12).fill(0), hE = new Array(12).fill(0);
   for (let doy = 1; doy <= 365; doy++) {
     const mo = DOY_MON[doy - 1];
     for (let h = 0; h < 24; h += 0.5) {
       const sp = sunPos(doy, h, lat, lon, tz);
       if (sp.alt <= 0) continue;
+      { const sa = Math.sin(sp.alt * RAD), am = 1 / (sa + 0.50572 * Math.pow(sp.alt + 6.07995, -1.6364)), Ib = 1361 * Math.pow(0.7, Math.pow(am, 0.678));
+        hH[mo] += 0.5; hE[mo] += Ib * sa * 1.1 * 0.5 / 1000; }
       for (let f = 0; f < 8; f++) {
         let d = (sp.azi - f * 45) % 360;
         if (d > 180) d -= 360; if (d < -180) d += 360;
@@ -942,7 +948,9 @@ function facadeSun(lat, lon) {
     annual[f] += v;
     (sumIdx.indexOf(m) >= 0 ? summer : winter)[f] += v;
   }));
-  return { monthly, winter, summer, annual };
+  const hz = { winter:0, summer:0, kwhW:0, kwhS:0, hours:hH, kwh:hE };
+  hH.forEach((v, m) => { const sm = sumIdx.indexOf(m) >= 0; hz[sm ? 'summer' : 'winter'] += v; hz[sm ? 'kwhS' : 'kwhW'] += hE[m]; });
+  return { monthly, winter, summer, annual, hz };
 }
 
 /* ------------------------------------------------------- 5. CHART ENGINE -- */
@@ -4365,16 +4373,27 @@ function buildWindows(host) {
     const sunLat = (STATE.site && isFinite(+STATE.site.lat)) ? +STATE.site.lat : 38.7;
     const sunLatKnown = !!(STATE.site && isFinite(+STATE.site.lat));
     const FS = facadeSun(sunLat, -9.0);
-    makePanel(frag, {
+    /* half the page wide, as in Architecture Advisor PT; full width on a phone */
+    const sunRow = frag.appendChild(el('div', { class:'grid g2' }));
+    makePanel(sunRow, {
       title: 'Direct-sun hours on each facade',
-      note: t('Unobstructed vertical facades over the whole year, split by half-year') +
+      note: t('Unobstructed vertical facades and the horizontal plane over the whole year, split by half-year; inside the horizontal bars, its clear-sky irradiation in kWh/m²') +
         ' · ' + (sunLatKnown ? fmt(sunLat, 1) + ' °N' : t('reference latitude 38.7° N')),
       aspect: 1.9,
       render(ctx, W, H) {
-        const yMaxB = niceDomain(0, Math.max.apply(null, FS.annual) * 1.02, 5, 0)[1];
-        const P = plotRect(48, 12, W - 48 - 10, H - 12 - 44, -0.6, 7.6, 0, yMaxB);
-        drawAxes(ctx, P, { xTicks:[0,1,2,3,4,5,6,7], xFmt:i => COMPASS8[i], yLabel:t('Hours per year'), yCount:4 });
-        const gw = P.w / 8, bw = Math.min(26, gw * 0.26);
+        const yMaxB = niceDomain(0, Math.max.apply(null, FS.annual.concat([FS.hz.winter + FS.hz.summer])) * 1.02, 5, 0)[1];
+        const P = plotRect(48, 12, W - 48 - 10, H - 12 - 44, -0.6, 8.6, 0, yMaxB);
+        drawAxes(ctx, P, { xTicks:[0,1,2,3,4,5,6,7,8], xFmt:i => i < 8 ? COMPASS8[i] : t('Horiz.'), yLabel:t('Hours per year'), yCount:4 });
+        const gw = P.w / 9, bw = Math.min(26, gw * 0.26);
+        /* the horizontal plane, set apart from the eight facades, with its irradiation per half-year */
+        ctx.save(); ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(P.sx(7.5), P.y); ctx.lineTo(P.sx(7.5), P.y + P.h); ctx.stroke(); ctx.restore();
+        { const cx = P.sx(8), wv = FS.hz.winter, sv = FS.hz.summer;
+          ctx.fillStyle = '#2563EB'; const y1 = P.sy(wv); ctx.fillRect(cx - bw - 1.5, y1, bw, P.y + P.h - y1);
+          ctx.fillStyle = '#D97706'; const y2 = P.sy(sv); ctx.fillRect(cx + 1.5, y2, bw, P.y + P.h - y2);
+          label(ctx, fmt(wv + sv, 0), cx, Math.min(y1, y2) - 5, CH.ink2, FM(9), 'center', 'middle');
+          label(ctx, fmt(FS.hz.kwhW, 0), cx - bw / 2 - 1.5, y1 + 10, '#fff', FM(8), 'center', 'middle');
+          label(ctx, fmt(FS.hz.kwhS, 0), cx + bw / 2 + 1.5, y2 + 10, '#fff', FM(8), 'center', 'middle');
+          label(ctx, 'kWh/m²', cx, P.y + P.h - 8, '#fff', FM(7), 'center', 'middle'); }
         for (let f = 0; f < 8; f++) {
           const cx = P.sx(f), wv = FS.winter[f], sv = FS.summer[f];
           ctx.fillStyle = '#2563EB'; const y1 = P.sy(wv); ctx.fillRect(cx - bw - 1.5, y1, bw, P.y + P.h - y1);
@@ -4386,8 +4405,9 @@ function buildWindows(host) {
            { color:'#D97706', label:t('Summer half-year (Apr–Sep)') }],
           { cols:2, colWidth:Math.min(230, P.w / 2) });
       },
-      csv: () => csvRows([[t('Month')].concat(ORI8)]
-        .concat(FS.monthly.map((row, m) => [MONTHS[m]].concat(row.map(v => +v.toFixed(1))))))
+      csv: () => csvRows([[t('Month')].concat(ORI8, [t('Horizontal (h)'), t('Horizontal clear-sky (kWh/m2)')])]
+        .concat(FS.monthly.map((row, m) => [MONTHS[m]].concat(row.map(v => +v.toFixed(1)),
+          [+FS.hz.hours[m].toFixed(1), +FS.hz.kwh[m].toFixed(1)]))))
     });
 
     /* --- suggested glazing for this window ---------------------------------
@@ -10595,6 +10615,10 @@ Object.assign(PT, {
 Object.assign(PT, {
   'Direct-sun hours on each facade': 'Horas de sol direto em cada fachada',
   'Unobstructed vertical facades over the whole year, split by half-year': 'Fachadas verticais desobstruídas ao longo de todo o ano, por semestre',
+  'Unobstructed vertical facades and the horizontal plane over the whole year, split by half-year; inside the horizontal bars, its clear-sky irradiation in kWh/m²': 'Fachadas verticais desobstruídas e o plano horizontal ao longo de todo o ano, por semestre; dentro das barras do plano horizontal, a sua irradiação de céu limpo em kWh/m²',
+  'Horiz.': 'Horiz.',
+  'Horizontal (h)': 'Horizontal (h)',
+  'Horizontal clear-sky (kWh/m2)': 'Horizontal, céu limpo (kWh/m2)',
   'Winter half-year (Oct–Mar)': 'Semestre de inverno (out–mar)',
   'Summer half-year (Apr–Sep)': 'Semestre de verão (abr–set)',
   'reference latitude 38.7° N': 'latitude de referência 38,7° N',
