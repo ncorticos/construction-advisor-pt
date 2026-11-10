@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.59.0',
+  version:     '2.60.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1992,6 +1992,12 @@ const MATERIALS = [
   { key:'seixo',    group:'Finishes',  name:'Gravel ballast',                      lam:0.70, rho:1500 }
 ];
 const MAT = {}; MATERIALS.forEach(m => MAT[m.key] = m);
+/* v2.60.0: a layer of the student's own material — λ, ρ and μ typed on the layer itself, from a declared value
+   (a product's DoP or technical sheet, ITE 50 or EN ISO 10456). Kept out of MATERIALS so the mosaic, the
+   suppliers and the library export carry only the library; every layer reads it through MAT as any other. */
+MAT._own = { key:'_own', group:'Other', name:'Own material (declared λ)', lam:1.0, rho:1000 };
+const ownLam = L => clamp(isFinite(+L.lam) && +L.lam > 0 ? +L.lam : 1.0, 0.01, 400);
+const ownRho = L => clamp(isFinite(+L.rho) && +L.rho >= 0 ? +L.rho : 1000, 0, 20000);
 
 /* ---------------------------------------------------- GLAZED OPENINGS --
    The glazed opening is treated as a frame and a glass: the frame fraction
@@ -2072,6 +2078,10 @@ const GLAZ_FAMILY = {
             role:'Two silver layers. Strong solar control with high light transmission.' },
   solar1: { name:'Solar-control double glazing, moderate selectivity', rank:2,
             role:'A single control layer. Cuts solar gain, but gives away more daylight doing it.' },
+  /* v2.60.0: the plain units of the Manual SCE, with the values it prints — Ug Tabela 46, g⊥ Tabela 51; it gives
+     no light transmission or reflection, so those read «—» and these two never stand as a suggestion */
+  plain:  { name:'Ordinary clear double glazing (Manual SCE)',      rank:0, manual:true,
+            role:'Two clear panes and an air gap, no coating: the default the Manual SCE sets where nothing better is known. It loses about two and a half times what a low-e unit does.' },
   refl:   { name:'Reflective solar-control double glazing',         rank:2,
             role:'High exterior light reflection. Strong control and a mirrored façade; the least selective of the coated build-ups.' }
 };
@@ -2111,10 +2121,14 @@ const GLAZING = [
   { f:'refl', ug:1.1, tl:33, g:0.28, rle:23, rli:20, st:1 },
   { f:'refl', ug:1.1, tl:32, g:0.28, rle:19, rli:17, st:1 },
   { f:'refl', ug:1.1, tl:19, g:0.17, rle:32, rli:26, st:1 },
-  { f:'refl', ug:1.1, tl:20, g:0.18, rle:21, rli:29, st:1 }
+  { f:'refl', ug:1.1, tl:20, g:0.18, rle:21, rli:29, st:1 },
+  /* appended, never inserted: a study stores its glass by its place in this list */
+  { f:'plain', ug:2.8, tl:null, g:0.78, rle:null, rli:null, cfg:'4–8 mm + 4 mm' },
+  { f:'plain', ug:2.8, tl:null, g:0.75, rle:null, rli:null, cfg:'4–8 mm + 5 mm' }
 ];
 /** The selectivity index: light admitted per unit of solar heat. */
-const glazIS = p => p.tl / (100 * p.g);
+const glazIS = p => p.tl === null || p.tl === undefined ? NaN : p.tl / (100 * p.g);
+const tlTxt = p => p.tl === null || p.tl === undefined ? '—' : p.tl + ' %';
 /** Ordinary clear double glazing, the datum every coated unit is read against. */
 const GLAZ_PLAIN = { ug: 2.70, tl: 80, g: 0.75 };
 
@@ -2476,6 +2490,7 @@ function layerR(L, flow) {
   const M = MAT[L.key];
   if (!M) return { r: 0, m: 0 };
   if (M.r !== undefined) return { r: M.r, m: M.rho * (M.d || L.d) };
+  if (L.key === '_own') return { r: L.d / ownLam(L), m: ownRho(L) * L.d };
   return { r: L.d / M.lam, m: M.rho * L.d };
 }
 
@@ -2626,7 +2641,7 @@ function dewPoint(p) {
 function vapourSd(L) {
   const d = layerThickness(L);
   if (L.air) return d;                       // still air, μ = 1
-  const mu = MAT_MU[L.key];
+  const mu = L.key === '_own' ? (isFinite(+L.mu) && +L.mu >= 1 ? +L.mu : 1) : MAT_MU[L.key];
   return (mu === undefined ? 1 : mu) * d;
 }
 
@@ -3051,6 +3066,7 @@ function materialOptions() {
     g.items.push({ value:m.key, label:m.name });
   });
   groups.push({ group:'Air', items:[{ value:'_air', label:'Unventilated air space' }] });
+  groups.push({ group:'Other', items:[{ value:'_own', label:'Own material (declared λ)' }] });
   return groups;
 }
 
@@ -3160,8 +3176,13 @@ function assemblyEditor(host, spec) {
         title: fixed ? t('This product is sold at a fixed thickness; its resistance does not scale.') : null,
         onchange: e => { S.layers[i].d = clamp(+e.target.value || 0.01, 0.005, 1.5); render(); } });
 
+      /* an own material: its λ, ρ and μ typed under its name */
+      const selCell = L.key !== '_own' ? sel : el('div', null, [sel, el('div', { style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:11px;color:var(--muted)' },
+        [['λ', 'lam', 0.01, 400, 0.001, ownLam(L), 'W/(m·°C)'], ['ρ', 'rho', 0, 20000, 10, ownRho(L), 'kg/m³'], ['μ', 'mu', 1, 1000000, 1, isFinite(+L.mu) ? +L.mu : 1, '']].map(([lb, k, lo, hi, st, v, u]) =>
+          el('label', { style:'display:flex;align-items:center;gap:3px' }, [document.createTextNode(lb), el('input', { type:'number', min:lo, max:hi, step:st, value:v, style:'width:72px',
+            'aria-label':lb + ' ' + t('of layer') + ' ' + (i + 1), onchange:e => { const x = +String(e.target.value).replace(',', '.'); if (isFinite(x)) S.layers[i][k] = clamp(x, lo, hi); render(); } }), document.createTextNode(u)])))]);
       list.appendChild(el('div', { class:'layer' + (L.air ? ' air' : '') }, [
-        sel, th,
+        selCell, th,
         el('span', { class:'r', text: fmt(part.r, 3) }),
         el('span', { class:'r', text: fmt(part.m, 0) + ' kg/m²' }),
         el('button', { class:'x', text:'↑', title:t('Move this layer up'), 'aria-label':t('Move this layer up'),
@@ -4130,9 +4151,46 @@ function buildWallsExt(host) {
     };
     paintIsle();
   }
+
+  /* --- v2.60.0: opaque doors, Manual SCE §7.3 ---------------------------- */
+  host.appendChild(section('Opaque doors', 'Manual SCE Tabela 32'));
+  {
+    const box = el('div');
+    host.appendChild(box);
+    const paint = () => {
+      box.innerHTML = '';
+      const D = DOOR_STATE, row = DOOR_U.find(d => d.key === D.type) || DOOR_U[2];
+      const declared = D.type === 'declared';
+      const U = declared ? (isFinite(+D.ud) && +D.ud > 0 ? +D.ud : null) : row.u;
+      const aaD = AA_STATE.present && AA_STATE.glazO ? AA_ORDER.reduce((a, c) => a + (AA_STATE.glazO.doors[c] || 0), 0) : 0;
+      box.appendChild(controls([
+        selectCtl(t('Door'), DOOR_U.map(d => ({ value:d.key, label:t(d.name) + (d.u ? ' — ' + fmt(d.u, 2) : '') }))
+          .concat([{ value:'declared', label:t('Declared by the manufacturer (EN 14351-1)') }]), D.type, v => { D.type = v; paint(); }, 300),
+        declared ? numCtl(t('U declared'), 0.3, 8, 0.05, isFinite(+D.ud) ? +D.ud : 1.8, v => { D.ud = v; paint(); }, 'W/(m²·°C)') : null,
+        numCtl(t('Door area'), 0, 100, 0.1, D.area !== null && D.area !== '' && isFinite(+D.area) ? +D.area : (aaD > 0 ? Math.round(aaD * 10) / 10 : 2.0), v => { D.area = v; paint(); }, 'm²')
+      ]));
+      const typed = D.area !== null && D.area !== undefined && D.area !== '' && isFinite(+D.area), A = typed ? +D.area : (aaD > 0 ? aaD : 2.0);
+      box.appendChild(stats([
+        statCard('U D', U === null ? '—' : fmt(U, 2), 'W/(m²·°C)', declared ? t('Declared value') : t('Default, Manual SCE Tabela 32')),
+        statCard(t('Door area'), fmt(A, 1), 'm²', !typed ? (aaD > 0 ? t('Doors from the Architecture Advisor') : t('A typical single door')) : t('Typed here')),
+        statCard('U · A', U === null ? '—' : fmt(U * A, 2), 'W/°C', t('Heat loss coefficient through the doors'))
+      ], 3));
+      box.appendChild(el('p', { class:'hint', html:t('Without a calculated or declared value, the Manual SCE gives these defaults by door type (Tabela 32): metal 7,30; metal with insulated metal panels 4,50; timber 2,70; PVC 2,50; fire door 2,50 W/(m²·°C). They include both surface resistances for a door to the outside; a door to an unheated space takes the inside film on both faces instead. A manufacturer\u2019s value counts only if calculated or tested to EN 14351-1. The Architecture Advisor\u2019s doors include glazed ones — keep here only the opaque ones.') }));
+    };
+    paint();
+  }
 }
 
 /* ----------------------------------------------------- INTERNAL WALLS -- */
+/** v2.60.0: opaque doors by type, U_D by default — Manual SCE Tabela 32, W/(m²·°C), surface resistances included. */
+const DOOR_U = [
+  { key:'metal',   name:'Metal',                                         u:7.30 },
+  { key:'metalis', name:'Metal, with insulated metal panels',            u:4.50 },
+  { key:'madeira', name:'Timber',                                        u:2.70 },
+  { key:'pvc',     name:'PVC',                                           u:2.50 },
+  { key:'fogo',    name:'Fire door',                                     u:2.50 }
+];
+const DOOR_STATE = { type:'madeira', ud:null, area:null };
 const WINT_STATE = { layers:cloneLayers(START.wallInt), ratio:1.0, vol:150, vent:false, kind:'enu',
                      ap:30, swall:12 };
 
@@ -4149,7 +4207,7 @@ const WINT_STATE = { layers:cloneLayers(START.wallInt), ratio:1.0, vol:150, vent
  * model — they are listed for reference and are not reachable from here.
  */
 function currentEL(kind) {
-  return kind === 'adj' ? 1 : 0;
+  return kind === 'adj' || kind === 'dwell' ? 1 : 0;
 }
 
 function buildWallsInt(host) {
@@ -4160,15 +4218,17 @@ function buildWallsInt(host) {
   rebuildable(host, (frag, rerender) => {
     const S = WINT_STATE;
     const calc = bztu(S.ratio, S.vol, S.vent);
-    const B = S.kind === 'adj' ? 0.6 : S.kind === 'strong' ? 1.0 : calc.b;
+    /* a neighbouring dwelling: no heat exchange (Manual SCE Tabela 15), so no loss and no U ceiling */
+    const B = S.kind === 'dwell' ? 0 : S.kind === 'adj' ? 0.6 : S.kind === 'strong' ? 1.0 : calc.b;
     const base = umax(Z, 'wall');
-    const lim  = umaxInterior(Z, 'wall', B);
+    const lim  = S.kind === 'dwell' ? Infinity : umaxInterior(Z, 'wall', B);
 
     frag.appendChild(controls([
       segCtl(t('What is on the other side'), [
         { value:'enu',    label:t('An unheated space') },
         { value:'strong', label:t('A strongly ventilated space') },
-        { value:'adj',    label:t('Another building') }
+        { value:'adj',    label:t('Another building') },
+        { value:'dwell',  label:t('A neighbouring dwelling') }
       ], S.kind, v => { S.kind = v; rerender(); }),
       S.kind === 'enu' ? el('div', { class:'divider' }) : null,
       S.kind === 'enu' ? numCtl('A i / A u', 0.1, 10, 0.1, S.ratio, v => { S.ratio = v; rerender(); }) : null,
@@ -4178,12 +4238,13 @@ function buildWallsInt(host) {
 
     frag.appendChild(stats([
       statCard('b ztu', fmt(B, 2), null,
-        S.kind === 'adj' ? t('Fixed by the manual for an adjacent building')
+        S.kind === 'dwell' ? t('No heat exchange with a neighbouring dwelling — Manual SCE Tabela 15')
+        : S.kind === 'adj' ? t('Fixed by the manual for an adjacent building')
         : S.kind === 'strong' ? t('A strongly ventilated space counts as outside')
         : t('Manual SCE Tabela 16')),
       statCard('U máx, exterior', fmt(base, 2), 'W/(m²·°C)', Z.wz + ' · ' + t('vertical element')),
-      statCard('U máx that applies here', fmt(lim, 2), 'W/(m²·°C)',
-        B > 0.7 ? t('Held to the exterior limit') : t('A fixed ceiling below b') + 'ztu' + t(' = 0,7')),
+      statCard('U máx that applies here', isFinite(lim) ? fmt(lim, 2) : '—', isFinite(lim) ? 'W/(m²·°C)' : null,
+        S.kind === 'dwell' ? t('No heat exchange: no ceiling on U') : B > 0.7 ? t('Held to the exterior limit') : t('A fixed ceiling below b') + 'ztu' + t(' = 0,7')),
       statCard('Internal films, both faces', fmt(2 * RSI.h, 2), '(m²·°C)/W', t('Horizontal flow on each side'))
     ]));
 
@@ -4193,6 +4254,9 @@ function buildWallsInt(host) {
     frag.appendChild(section('Build the wall', 'An internal surface film on both faces'));
     assemblyEditor(frag, { state:S, flow:'h', bc:'int', limit:lim, insKey:'mw',
       limitNote:'b ztu = ' + fmt(B, 2), massCap:300 });
+    if (S.kind === 'adj' || S.kind === 'dwell') frag.appendChild(el('p', { class:'hint', html:t(S.kind === 'adj'
+      ? 'A wall against another building (a party wall to a building that is not part of this one) is an interior boundary with <b>b<sub>ztu</sub> = 0,6</b> (Manual SCE Tabela 16, note 2): its loss is <code>U · A · 0,6 · ΔT</code> and its U is held to the interior ceiling.'
+      : 'A wall against a <b>neighbouring dwelling</b> is a boundary with <b>no heat exchange</b> (Manual SCE Tabela 15): it takes no loss and no U ceiling, and still counts for thermal inertia (an EL1 element, Tabela 37). Against a shop or office next door the boundary is interior instead, with its own b<sub>ztu</sub>.') }));
     frag.appendChild(hint('wallint-films',
       'Both faces of this wall are inside, so both take R<sub>si</sub> = 0,13 and neither takes R<sub>se</sub>. That alone is worth 0,09 (m²·°C)/W more than the same wall built on the outside of the building.'));
 
@@ -4273,7 +4337,7 @@ function buildWindows(host) {
     frag.appendChild(controls([
       selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
         value:String(i),
-        label: t(GLAZ_FAMILY[p.f].name) + ' — U ' + fmt(p.ug, 1) + ', T' + t('L') + ' ' + p.tl + ' %, g ' + fmt(p.g, 2)
+        label: t(GLAZ_FAMILY[p.f].name) + (p.cfg ? ' ' + p.cfg : '') + ' — U ' + fmt(p.ug, 1) + ', T' + t('L') + ' ' + tlTxt(p) + ', g ' + fmt(p.g, 2)
       })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
       selectCtl(t('Frame'), FRAMES.map(f => ({ value:f.key, label:t(f.name) })), S.frame,
         v => { S.frame = v; rerender(); }),
@@ -4462,7 +4526,7 @@ function buildWindows(host) {
     const cool1 = Z.gsol[oi] * FWV[ORI8[oi]];
     const loadRatio = heat1 > 0 ? cool1 / heat1 : Infinity;
     const bySelect = loadRatio >= 1;
-    const best = GLAZING.map((p, i) => ({ p, i, is:glazIS(p) }))
+    const best = GLAZING.map((p, i) => ({ p, i, is:glazIS(p) })).filter(q => !GLAZ_FAMILY[q.p.f].manual)
       .sort((a, b) => bySelect ? b.is - a.is : b.p.g - a.p.g)[0];
     /* Saint-Gobain's own naming for the two technologies this library
        models — a real, stable brand fact, not a claim that a given SKU
@@ -5411,7 +5475,7 @@ function buildShading(host) {
     frag.appendChild(controls([
       selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
         value:String(i),
-        label:t(GLAZ_FAMILY[p.f].name) + ' — U ' + fmt(p.ug, 1) + ', TL ' + p.tl + ' %, g ' + fmt(p.g, 2)
+        label:t(GLAZ_FAMILY[p.f].name) + (p.cfg ? ' ' + p.cfg : '') + ' — U ' + fmt(p.ug, 1) + ', TL ' + tlTxt(p) + ', g ' + fmt(p.g, 2)
       })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
       selectCtl(t('Colour of the devices'), COLOURS.map(c => ({ value:c.key, label:t(c.name) })),
         S.colour, v => { S.colour = v; rerender(); }),
@@ -5682,7 +5746,7 @@ const AA_HANDOFF_KEY = 'arca-handoff-construction';
 const AA_ORDER = ['N','NE','E','SE','S','SW','W','NW'];
 const AA_STATE = { present:false, savedAt:null, fromApp:null, fromVer:null,
   building:null, facades:{}, clerestory:null, roofWindows:null, roof:null, floor:null, budgetKeys:[], study:null,
-  glazO:null };
+  glazO:null, party:{}, wextBase:null, wintFromParty:false };
 /* v2.50.0: the way back. The Architecture Advisor study that came with the
    hand-off is kept (and saved with this assessment), so the student can
    reopen that same design there; it travels in the address, as it came. */
@@ -5695,7 +5759,7 @@ function backToArchitecture() {
 }
 const STATE_REGISTRY = {
   ROOF_STATE, WEXT_STATE, WINT_STATE, PAV_STATE, VENT_STATE,
-  FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE, AA_STATE
+  FLR_STATE, WIN_STATE, SHD2_STATE, IAQ_STATE, IAQ_VENT_STATE, AA_STATE, DOOR_STATE
 };
 
 /* A pristine copy of every state object, taken once at load, before a
@@ -6424,6 +6488,8 @@ function exportPptx(format) {
         t(COLOURS.find(c => c.key === ST.colour).name) + (want === null ? '' : ' — ' + mark), sz:12 }] }] });
     };
     const uline = (A, lim, w) => {
+      /* no ceiling (a wall against a neighbouring dwelling): U alone */
+      if (!isFinite(lim)) return R.shape({ x:0.6, y:w, w:7.6, h:0.5, paras:[{ runs:[{ t:'U = ' + fmt(A.U, 3) + '  ·  ' + t('No heat exchange: no ceiling on U'), sz:14 }] }] });
       const v = verdict(A.U, lim);
       return R.shape({ x:0.6, y:w, w:7.6, h:0.5, paras:[{ runs:[
         { t:'U = ' + fmt(A.U, 3) + '  ·  ' + t('Limit') + ' ' + fmt(lim, 2), sz:14 },
@@ -6539,8 +6605,8 @@ function exportPptx(format) {
     {
       const W = WINT_STATE;
       const calc = bztu(W.ratio, W.vol, W.vent);
-      const B = W.kind === 'adj' ? 0.6 : W.kind === 'strong' ? 1.0 : calc.b;
-      const lim = umaxInterior(Z, 'wall', B);
+      const B = W.kind === 'dwell' ? 0 : W.kind === 'adj' ? 0.6 : W.kind === 'strong' ? 1.0 : calc.b;
+      const lim = W.kind === 'dwell' ? Infinity : umaxInterior(Z, 'wall', B);
       const A = assemble(W.layers, 'h', 'int');
       const elRow = currentEL(W.kind);
       const cap = elRow === 0 ? 150 : 300;
@@ -6712,6 +6778,9 @@ function aaApplyMeta(data) {
   const bs = (data.state && data.state.BUDGET_STATE) || {};
   AA_STATE.budgetKeys = ['roof','ground','wext','win'].filter(k => bs[k] &&
     bs[k].area !== null && bs[k].area !== undefined && bs[k].area !== '');
+  /* v2.60.0: the opaque wall area as it came, before any side is marked as against a neighbour */
+  AA_STATE.wextBase = bs.wext && isFinite(+bs.wext.area) ? +bs.wext.area : null;
+  AA_STATE.party = {}; AA_STATE.wintFromParty = false;
   /* Glazing area per true orientation for the Windows tab suggestion box:
      glass + doors of each compass bucket (ventilation bricks are not
      windows; clerestory and roof lights carry no orientation here). A file
@@ -6747,7 +6816,21 @@ function aaClear() {
   AA_STATE.present = false; AA_STATE.savedAt = null; AA_STATE.fromApp = null; AA_STATE.fromVer = null;
   AA_STATE.building = null; AA_STATE.facades = {}; AA_STATE.clerestory = null;
   AA_STATE.roofWindows = null; AA_STATE.roof = null; AA_STATE.floor = null; AA_STATE.budgetKeys = [];
-  AA_STATE.glazO = null;
+  AA_STATE.glazO = null; AA_STATE.party = {}; AA_STATE.wextBase = null; AA_STATE.wintFromParty = false;
+}
+/** v2.60.0: a side marked as against another building or a neighbouring dwelling leaves the external walls.
+ *  Against another building its opaque area becomes an internal wall with b_ztu = 0,6 (Manual SCE Tabela 16,
+ *  note 2); against a neighbouring dwelling there is no heat exchange (Tabela 15) and it is counted nowhere. */
+function aaApplyParty() {
+  const E = AA_STATE, P = E.party || {}, opq = c => { const b = E.facades[c]; return b ? Math.max(0, b.wall - b.glass - b.doors - b.gel) : 0; };
+  let adj = 0, dwell = 0;
+  Object.keys(P).forEach(c => { if (P[c] === 'adj') adj += opq(c); else if (P[c] === 'dwell') dwell += opq(c); });
+  const r1 = v => Math.round(v * 10) / 10;
+  /* only over the imported area: a figure the student typed is theirs */
+  if (E.wextBase !== null && isFinite(E.wextBase) && E.budgetKeys.indexOf('wext') >= 0) BUDGET_STATE.wext.area = r1(Math.max(0, E.wextBase - adj - dwell));
+  if (adj > 0) { BUDGET_STATE.wint.area = r1(adj); E.wintFromParty = true; WINT_STATE.kind = 'adj'; }
+  else { if (E.wintFromParty) BUDGET_STATE.wint.area = null; E.wintFromParty = false; if (dwell > 0) WINT_STATE.kind = 'dwell'; }
+  return { adj, dwell };
 }
 function aaTotals() {
   const o = { wall:0, glass:0, doors:0, gel:0 };
@@ -6801,6 +6884,16 @@ function buildAaCard(host) {
   if (E.floor && E.floor.perimeter) o2.push([t('Floor perimeter'), fmt(E.floor.perimeter, 1) + ' m']);
   if (B.sunspace) o2.push([t('Sunspace'), B.sunspace.face + ' · ' + fmt(B.sunspace.depth, 1) + ' m']);
   if (o2.length) card.appendChild(dataTable([t('Other measured areas'), t('Value')], o2, [0]));
+  /* v2.60.0: what each side stands against — a party wall leaves the external walls */
+  const sides = AA_ORDER.filter(c => E.facades[c]);
+  if (sides.length) {
+    const pr = aaApplyParty();
+    card.appendChild(section('Walls against a neighbour', t('Manual SCE Tabelas 15 and 16')));
+    card.appendChild(controls(sides.map(c => selectCtl(COMPASS8[AA_ORDER.indexOf(c)] + ' · ' + fmt(Math.max(0, E.facades[c].wall - E.facades[c].glass - E.facades[c].doors - E.facades[c].gel), 1) + ' m²', [
+      { value:'ext', label:t('Outside') }, { value:'adj', label:t('Another building (b = 0,6)') }, { value:'dwell', label:t('A neighbouring dwelling (no exchange)') }
+    ], (E.party || {})[c] || 'ext', v => { E.party[c] = v; aaApplyParty(); const nw = el('div'); buildAaCard(nw); card.replaceWith(nw.firstChild); }, 230))));
+    card.appendChild(el('p', { class:'hint', html:t('Mark a side that stands against another building or a neighbouring dwelling. Against <b>another building</b> its opaque area moves to the internal walls with b<sub>ztu</sub> = 0,6 (Manual SCE Tabela 16, note 2); against a <b>neighbouring dwelling</b> there is no heat exchange (Tabela 15) and it leaves the envelope. External walls now') + ' <b>' + (BUDGET_STATE.wext.area === null ? '—' : fmt(BUDGET_STATE.wext.area, 1) + ' m²') + '</b>' + (pr.adj > 0 ? ' · ' + t('internal walls against another building') + ' <b>' + fmt(pr.adj, 1) + ' m²</b>' : '') + (pr.dwell > 0 ? ' · ' + t('left out, against a dwelling') + ' <b>' + fmt(pr.dwell, 1) + ' m²</b>' : '') + '.' }));
+  }
   card.appendChild(hint('aa-note',
     'U-values, layer build-ups, interior assemblies, prices and the glazing specification stay manual here — the other app does not decide them. The cost panels already carry its measured areas; the unit prices are still yours to read from the price bank.'));
   const hide = el('button', { class:'btn', text:t('Hide this summary'),
@@ -10085,6 +10178,40 @@ Object.assign(PT, {
   "Basalt": "Basalto",
   "Rammed earth or adobe": "Taipa ou adobe",
   "Basalt stone masonry with lime mortar": "Alvenaria de pedra basáltica com argamassa de cal",
+  "Own material (declared λ)": "Material próprio (λ declarado)",
+  "of layer": "da camada",
+  "Other": "Outro",
+  "A neighbouring dwelling": "Uma habitação vizinha",
+  "No heat exchange with a neighbouring dwelling — Manual SCE Tabela 15": "Sem trocas térmicas com uma habitação vizinha — Manual SCE Tabela 15",
+  "No heat exchange: no ceiling on U": "Sem trocas térmicas: sem limite de U",
+  "A wall against another building (a party wall to a building that is not part of this one) is an interior boundary with <b>b<sub>ztu</sub> = 0,6</b> (Manual SCE Tabela 16, note 2): its loss is <code>U · A · 0,6 · ΔT</code> and its U is held to the interior ceiling.": "Uma parede encostada a outro edifício (uma parede de meação com um edifício que não faz parte deste) tem condição fronteira interior com <b>b<sub>ztu</sub> = 0,6</b> (Manual SCE, Tabela 16, nota 2): a perda é <code>U · A · 0,6 · ΔT</code> e o U fica sujeito ao limite interior.",
+  "A wall against a <b>neighbouring dwelling</b> is a boundary with <b>no heat exchange</b> (Manual SCE Tabela 15): it takes no loss and no U ceiling, and still counts for thermal inertia (an EL1 element, Tabela 37). Against a shop or office next door the boundary is interior instead, with its own b<sub>ztu</sub>.": "Uma parede encostada a uma <b>habitação vizinha</b> tem condição fronteira <b>sem trocas térmicas</b> (Manual SCE, Tabela 15): não conta perdas nem tem limite de U, e continua a contar para a inércia térmica (elemento EL1, Tabela 37). Encostada a comércio ou serviços, a condição é interior, com o seu b<sub>ztu</sub>.",
+  "Walls against a neighbour": "Paredes encostadas a um vizinho",
+  "Manual SCE Tabelas 15 and 16": "Manual SCE, Tabelas 15 e 16",
+  "Another building (b = 0,6)": "Outro edifício (b = 0,6)",
+  "A neighbouring dwelling (no exchange)": "Uma habitação vizinha (sem trocas)",
+  "Mark a side that stands against another building or a neighbouring dwelling. Against <b>another building</b> its opaque area moves to the internal walls with b<sub>ztu</sub> = 0,6 (Manual SCE Tabela 16, note 2); against a <b>neighbouring dwelling</b> there is no heat exchange (Tabela 15) and it leaves the envelope. External walls now": "Assinale o lado encostado a outro edifício ou a uma habitação vizinha. Encostado a <b>outro edifício</b>, a sua área opaca passa para as paredes interiores com b<sub>ztu</sub> = 0,6 (Manual SCE, Tabela 16, nota 2); encostado a uma <b>habitação vizinha</b> não há trocas térmicas (Tabela 15) e sai da envolvente. Paredes exteriores agora",
+  "internal walls against another building": "paredes interiores encostadas a outro edifício",
+  "left out, against a dwelling": "fora da envolvente, encostadas a uma habitação",
+  "Opaque doors": "Portas opacas",
+  "Manual SCE Tabela 32": "Manual SCE, Tabela 32",
+  "Door": "Porta",
+  "Metal": "Metálica",
+  "Metal, with insulated metal panels": "Metálica, com painéis metálicos com núcleo isolante",
+  "Timber": "Madeira",
+  "PVC": "PVC",
+  "Fire door": "Corta-fogo",
+  "Declared by the manufacturer (EN 14351-1)": "Declarado pelo fabricante (EN 14351-1)",
+  "U declared": "U declarado",
+  "Door area": "Área de portas",
+  "Declared value": "Valor declarado",
+  "Default, Manual SCE Tabela 32": "Por defeito, Manual SCE Tabela 32",
+  "Doors from the Architecture Advisor": "Portas do Architecture Advisor",
+  "Typed here": "Introduzida aqui", "A typical single door": "Uma porta corrente",
+  "Heat loss coefficient through the doors": "Coeficiente de perdas pelas portas",
+  "Without a calculated or declared value, the Manual SCE gives these defaults by door type (Tabela 32): metal 7,30; metal with insulated metal panels 4,50; timber 2,70; PVC 2,50; fire door 2,50 W/(m²·°C). They include both surface resistances for a door to the outside; a door to an unheated space takes the inside film on both faces instead. A manufacturer’s value counts only if calculated or tested to EN 14351-1. The Architecture Advisor’s doors include glazed ones — keep here only the opaque ones.": "Sem valor calculado ou declarado, o Manual SCE dá estes valores por defeito por tipo de porta (Tabela 32): metálica 7,30; metálica com painéis metálicos com núcleo isolante 4,50; madeira 2,70; PVC 2,50; corta-fogo 2,50 W/(m²·°C). Incluem as duas resistências superficiais de uma porta para o exterior; uma porta para um espaço não útil leva a resistência interior nas duas faces. Um valor do fabricante só conta se for calculado ou ensaiado pela EN 14351-1. As portas do Architecture Advisor incluem as envidraçadas — deixe aqui só as opacas.",
+  "Ordinary clear double glazing (Manual SCE)": "Vidro duplo incolor corrente (Manual SCE)",
+  "Two clear panes and an air gap, no coating: the default the Manual SCE sets where nothing better is known. It loses about two and a half times what a low-e unit does.": "Dois vidros incolores e uma lâmina de ar, sem revestimento: o valor por defeito do Manual SCE quando não há melhor informação. Perde cerca de duas vezes e meia o que perde um vidro de baixa emissividade.",
   "Schist (slate)": "Xisto (ardósia)", "Schist stone masonry with clay or lime mortar": "Alvenaria de pedra de xisto com argamassa de barro ou cal",
   "Cross-laminated timber, CLT": "Madeira lamelada-colada cruzada, CLT",
   "Tick these only for a fan that runs <b>continuously, or without depending on the occupant</b> (a timer, a humidistat, a central extract unit). A cooker hood or a bathroom fan switched on by hand does not count towards R<sub>ph</sub> (Manual SCE §9.1.5) — counted, it lifts the rate to a figure a certificate would not accept.": "Assinale apenas um ventilador que funcione <b>em contínuo, ou sem depender do ocupante</b> (temporizador, higrostato, unidade central de extração). Um exaustor de cozinha ou um ventilador de casa de banho ligado à mão não conta para a R<sub>ph</sub> (Manual SCE §9.1.5) — contado, eleva a taxa a um valor que um certificado não aceitaria.",
