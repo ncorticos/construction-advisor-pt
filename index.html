@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.61.0',
+  version:     '2.62.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1901,35 +1901,84 @@ const UBF_PERIM = {
    thickness the student types; the editor locks its thickness accordingly. */
 /**
  * Water-vapour resistance factor μ, dimensionless, for the Glaser check on the
- * external-wall page.
+ * external-wall page — v2.62.0.
  *
- * READ THIS BEFORE QUOTING ANY OF IT. These are NOT from LNEC ITE 50, which
- * tabulates thermal properties and not vapour ones, and they are not
- * transcribed design values from EN ISO 10456 either. They are indicative
- * figures of the right order for each material class, carried so that the
- * Glaser diagram has something to run on and so that the *shape* of the
- * answer — which layer the condensation plane falls in, and which way it
- * moves when insulation changes side — is right.
+ * Where a material class is listed in EN ISO 10456 (Tabelas 3 e 4, UNI EN ISO
+ * 10456, Portuguese transcription by AIPE), the entry carries both design
+ * values: [dry cup, wet cup, source row]. The Glaser check uses the dry-cup
+ * value for a layer on the warm side of the assembly's thermal midpoint and
+ * the wet-cup value for a layer on the cold side — the dry cup is measured at
+ * 0/50 % RH, the wet cup at 50/93 % RH, and in a winter month the cold side
+ * of a wall is the one sitting near the outdoor 80 % RH.
  *
- * A real hygrothermal assessment uses the declared μ of the actual product,
- * and the difference between a generic figure and a declared one is routinely
- * a factor of two. The panel says so on its face; do not let a student carry
- * a number out of it into a submission.
+ * Entries given as a bare number are NOT in that table — hollow clay and
+ * concrete units (EN 1745 territory), rammed earth, rubble masonry, the
+ * lightened slab, loose gravel, a tiled finish with joints — and stay
+ * indicative figures of the right order. The panel marks them as such, layer
+ * by layer; do not let a student quote them.
  *
- * They are kept apart from MATERIALS deliberately, so that the ITE 50 table
- * above stays a transcription of one source and this stays a separate,
- * weaker claim.
+ * Kept apart from MATERIALS, so the ITE 50 table above stays a transcription
+ * of one source and this one of another.
  */
 const MAT_MU = {
-  betao:100, betaol:60, lajealig:15, lajealig27:15, aco:100000, madeirae:30, madeirad:60,
-  tijolo11:10, tijolo15:10, tijolo22:10, tijolom:16, blococ:60, blocol:40, betaocel:8,
-  pedrag:10000, pedrac:250, pedrab:10000, taipa:12,
-  eps:60, xps:150, mw:1, pur:60, icb:10, fibrom:5,
-  reboco:20, estuque:10, gesso:10, ceramico:300, pedran:250, soalho:50, betonilha:20,
-  imperm:50000, seixo:1,
-  telha:40, madcob:5, albasalto:30, rebcal:10, estcal:10,
-  xisto:800, alxisto:30, clt:50
+  betao:[130, 80, 'Betão armado (2 % aço), 2400 kg/m³ — Tab. 3'],
+  betaol:[15, 10, 'Betão com outros agregados leves, 500–2000 kg/m³ — Tab. 4'],
+  lajealig:15, lajealig27:15,
+  aco:[1e6, 1e6, 'Aço: ∞ — Tab. 3; 10⁶ para cálculo, Nota 1'],
+  madeirae:[50, 20, 'Madeira, 450–500 kg/m³ — Tab. 3'],
+  madeirad:[200, 50, 'Madeira, 700 kg/m³ — Tab. 3'],
+  clt:[50, 20, 'Madeira, 450–500 kg/m³ — Tab. 3'],
+  soalho:[50, 20, 'Madeira, 500 kg/m³ (linha mais próxima de 600) — Tab. 3'],
+  tijolo11:10, tijolo15:10, tijolo22:10, tijolom:16, blococ:60,
+  blocol:[8, 6, 'Betão de argila expandida, 800–1700 kg/m³ — Tab. 4'],
+  betaocel:[10, 6, 'Betão celular autoclavado — Tab. 4'],
+  pedrag:[10000, 10000, 'Granito — Tab. 3'],
+  pedrac:[200, 150, 'Calcário duro, 2200 kg/m³ — Tab. 3'],
+  pedrab:[10000, 10000, 'Basalto — Tab. 3'],
+  xisto:[1000, 800, 'Ardósia — Tab. 3'],
+  pedran:[250, 200, 'Rocha natural sedimentar, 2600 kg/m³ — Tab. 3'],
+  taipa:12, albasalto:30, alxisto:30,
+  eps:[60, 60, 'Poliestireno expandido — Tab. 4'],
+  xps:[150, 150, 'Poliestireno extrudido — Tab. 4'],
+  mw:[1, 1, 'Lã mineral — Tab. 4'],
+  pur:[60, 60, 'Poliuretano rígido — Tab. 4'],
+  icb:[10, 5, 'Aglomerado de cortiça expandida — Tab. 4'],
+  fibrom:[5, 3, 'Painel de fibra de madeira — Tab. 4'],
+  reboco:[10, 6, 'Cimento e areia — Tab. 3'],
+  rebcal:[10, 6, 'Cal e areia — Tab. 3'],
+  estcal:[10, 6, 'Cal e areia — Tab. 3'],
+  estuque:[10, 6, 'Revestimento de gesso, 1000 kg/m³ — Tab. 3'],
+  gesso:[10, 4, 'Placa de gesso cartonado — Tab. 3'],
+  betonilha:[20, 10, 'Argamassa — Tab. 4'],
+  imperm:[50000, 50000, 'Manta de betume — Tab. 3'],
+  telha:[40, 30, 'Telha cerâmica (terracota) — Tab. 3'],
+  ceramico:300, seixo:1, madcob:5
 };
+/** μ of a library material on the dry- or wet-cup side; a bare number is the
+    same either way and is flagged as indicative. */
+function matMu(key, wet) {
+  const v = MAT_MU[key];
+  if (v === undefined) return { mu:1, src:null };
+  if (typeof v === 'number') return { mu:v, src:null };
+  return { mu: wet ? v[1] : v[0], src:v[2] };
+}
+
+/* EN ISO 10456 Tabela 5: thin sheets given directly as s_d, the product's
+   thickness being only a label. They are layers with no thermal role (R = 0)
+   and are kept out of MATERIALS, like the own material, so the mosaic, the
+   suppliers and the library export carry only the library. */
+const MEMBRANES = [
+  { key:'_m_pe15', name:'Polyethylene film, 0.15 mm', sd:50 },
+  { key:'_m_pe25', name:'Polyethylene film, 0.25 mm', sd:100 },
+  { key:'_m_pes',  name:'Polyester film, 0.2 mm', sd:50 },
+  { key:'_m_pvc',  name:'PVC sheet', sd:30 },
+  { key:'_m_al05', name:'Aluminium foil, 0.05 mm', sd:1500 },
+  { key:'_m_kraft',name:'Bitumen-impregnated paper, 0.1 mm', sd:2 },
+  { key:'_m_breath',name:'Breathable membrane', sd:0.2 },
+  { key:'_m_emul', name:'Paint, emulsion', sd:0.1 },
+  { key:'_m_gloss',name:'Paint, gloss', sd:3 },
+  { key:'_m_vinyl',name:'Vinyl wallpaper', sd:2 }
+];
 /** The indoor and outdoor conditions the Glaser check is run at, ISO 13788. */
 const GLASER_ENV = { ti:20, rhi:0.50, rhe:0.80 };
 
@@ -1996,6 +2045,7 @@ const MAT = {}; MATERIALS.forEach(m => MAT[m.key] = m);
    (a product's DoP or technical sheet, ITE 50 or EN ISO 10456). Kept out of MATERIALS so the mosaic, the
    suppliers and the library export carry only the library; every layer reads it through MAT as any other. */
 MAT._own = { key:'_own', group:'Other', name:'Own material (declared λ)', lam:1.0, rho:1000 };
+MEMBRANES.forEach(m => { MAT[m.key] = { key:m.key, group:'Membranes', name:m.name, r:0, rho:0, d:0.0005, sd:m.sd }; });
 const ownLam = L => clamp(isFinite(+L.lam) && +L.lam > 0 ? +L.lam : 1.0, 0.01, 400);
 const ownRho = L => clamp(isFinite(+L.rho) && +L.rho >= 0 ? +L.rho : 1000, 0, 20000);
 
@@ -2704,13 +2754,21 @@ function dewPoint(p) {
   const k = Math.log(p / 610.5);
   return k >= 0 ? 237.3 * k / (17.269 - k) : 265.5 * k / (21.875 - k);
 }
-/** Vapour diffusion-equivalent air layer thickness s_d = μ · d, in metres. */
-function vapourSd(L) {
+/** The vapour data of one layer: μ, which cup it was read on, its source,
+    and s_d = μ · d in metres. `wet` picks the wet-cup value of a material
+    that has both (EN ISO 10456). A Tabela 5 sheet carries s_d directly. */
+function vapourOf(L, wet) {
   const d = layerThickness(L);
-  if (L.air) return d;                       // still air, μ = 1
-  const mu = L.key === '_own' ? (isFinite(+L.mu) && +L.mu >= 1 ? +L.mu : 1) : MAT_MU[L.key];
-  return (mu === undefined ? 1 : mu) * d;
+  if (L.air) return { mu:1, sd:d, cup:'', src:'Ar — Tab. 3' };   // still air
+  const M = MAT[L.key];
+  if (M && M.sd !== undefined) return { mu:null, sd:M.sd, cup:'', src:'s_d tabelado — Tab. 5' };
+  if (L.key === '_own') { const mu = isFinite(+L.mu) && +L.mu >= 1 ? +L.mu : 1;
+    return { mu, sd:mu * d, cup:'', src:'own' }; }
+  const v = matMu(L.key, wet);
+  return { mu:v.mu, sd:v.mu * d, cup: v.src ? (wet ? 'wet' : 'dry') : '', src:v.src };
 }
+/** Vapour diffusion-equivalent air layer thickness s_d = μ · d, in metres. */
+function vapourSd(L, wet) { return vapourOf(L, wet).sd; }
 
 /**
  * The temperature and vapour-pressure profile through an assembly.
@@ -2724,9 +2782,12 @@ function vapourSd(L) {
 function glaser(A, te, opt) {
   const o = opt || GLASER_ENV;
   const ti = o.ti, pi = o.rhi * pSat(ti), pe = o.rhe * pSat(te);
-  const sd = A.parts.map(p => vapourSd(p.L));
-  const Sd = sd.reduce((a, b) => a + b, 0);
   const R = A.R || 1;
+  /* dry cup on the warm side of the thermal midpoint, wet cup on the cold side */
+  let rMid = A.rse;
+  const vap = A.parts.map(p => { const cold = rMid + p.r / 2 < R / 2; rMid += p.r; return vapourOf(p.L, cold); });
+  const sd = vap.map(v => v.sd);
+  const Sd = sd.reduce((a, b) => a + b, 0);
 
   const nodes = [];
   let rCum = A.rse, sCum = 0, xCum = 0;
@@ -2738,7 +2799,7 @@ function glaser(A, te, opt) {
   push(0, rCum, 0, 'outer surface');
   A.parts.forEach((part, i) => {
     rCum += part.r; sCum += sd[i]; xCum += layerThickness(part.L);
-    push(xCum, rCum, sCum, part.L.air ? 'air space' : (MAT[part.L.key] || {}).name || '');
+    push(xCum, rCum, sCum, part.L.air ? 'air space' : (part.L.key === '_own' ? 'Own material (declared λ)' : (MAT[part.L.key] || {}).name || ''));
   });
 
   /* Condensation wherever the vapour pressure has run above what the local
@@ -2749,7 +2810,7 @@ function glaser(A, te, opt) {
     n.excess = n.p - n.ps;
     if (n.wet && (!worst || n.excess > worst.excess)) worst = Object.assign({ i }, n);
   });
-  return { nodes, worst, wet: !!worst, ti, te, pi, pe, Sd, total: xCum };
+  return { nodes, worst, wet: !!worst, ti, te, pi, pe, Sd, total: xCum, vap };
 }
 
 /* ------------------------------------------------------- SITE HELPERS -- */
@@ -3133,6 +3194,7 @@ function materialOptions() {
     g.items.push({ value:m.key, label:m.name });
   });
   groups.push({ group:'Air', items:[{ value:'_air', label:'Unventilated air space' }] });
+  groups.push({ group:'Membranes', items:MEMBRANES.map(m => ({ value:m.key, label:m.name + ' · s_d ' + m.sd + ' m' })) });
   groups.push({ group:'Other', items:[{ value:'_own', label:'Own material (declared λ)' }] });
   return groups;
 }
@@ -3142,7 +3204,7 @@ function materialOptions() {
    insulation and finishes on sight; a small shift within the family keeps two
    different products (two brick widths, two boards) visibly distinct without
    competing with the family colour. */
-const MAT_GROUP_COLOR = { Structure:'#6B6E68', Masonry:'#C4442A', Insulation:'#EFAE1F', Finishes:'#2563EB', Air:'#CFE3EF' };
+const MAT_GROUP_COLOR = { Structure:'#6B6E68', Masonry:'#C4442A', Insulation:'#EFAE1F', Finishes:'#2563EB', Air:'#CFE3EF', Membranes:'#7C3AED' };
 function shadeHex(hex, amt) {
   const h = hex.replace('#', '');
   const c = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
@@ -4106,8 +4168,19 @@ function glaserPanel(host, state, Z) {
         .concat(N.map(n => [(n.x * 1000).toFixed(0), n.T.toFixed(2), n.td.toFixed(2)])))
     });
 
+    frag.appendChild(dataTable(
+      [t('Layer, from outside inwards'), 'd (mm)', 'μ', t('Cup'), 's<sub>d</sub> (m)', t('Source')],
+      A.parts.map((part, i) => { const v = G.vap[i], L = part.L;
+        const nm = L.air ? t('air space') : t(L.key === '_own' ? 'Own material (declared λ)' : (MAT[L.key] || {}).name || '');
+        return [nm, MAT[L.key] && MAT[L.key].sd !== undefined ? '—' : fmt(1000 * layerThickness(L), 0),
+          v.mu === null ? '—' : (v.mu >= 1e6 ? '∞' : fmt(v.mu, 0)),
+          v.cup ? t(v.cup === 'wet' ? 'wet (cold side)' : 'dry (warm side)') : '—',
+          fmt(v.sd, v.sd < 1 ? 2 : 1),
+          v.src === 'own' ? t('declared by the student') : (v.src ? 'EN ISO 10456 · ' + v.src
+            : '<span class="pill warn">' + t('indicative — not in EN ISO 10456') + '</span>')]; }),
+      [0, 3, 5]));
     frag.appendChild(hint('wall-glaser-note',
-      'Where the blue temperature line drops below the dashed dew point, the wall is colder than the air inside it can stay clear of, and vapour condenses on that plane. Move the insulation to the outside of the mass and watch the crossing disappear: the mass then sits warm, on the inside of the barrier, which is the whole argument for external insulation stated in one picture.<br><br><b>What this is.</b> The Glaser method of EN ISO 13788 — steady state, one month, no moisture stored in the material, no capillary transport back out, no driving rain and no air leakage. Its own standard calls it a screening method, not a prediction of how wet a wall gets. It runs here at <b>%1 °C and %2 % RH</b> inside against <b>%3 °C and %4 % RH</b> outside, that outdoor temperature being θ<sub>ext,i</sub> for this site, the mean of the coldest month of the heating season.<br><br><b>What the vapour numbers are worth.</b> The μ factors behind s<sub>d</sub> are generic figures for each material class, not declared product data and not transcribed from EN ISO 10456. They are good enough to put the condensation plane in the right layer and to show which way it moves; they are not good enough to quote. A real assessment uses the declared μ of the products specified, and the gap between a generic value and a declared one is routinely a factor of two.<br><br><b>What it cannot tell apart.</b> Old solid masonry wetted by driving rain dries by capillarity and vapour in both directions; an inside insulation open to vapour and capillary-active (wood fibre, cork, calcium silicate) lets it dry inwards, one closed to vapour (XPS, PUR, a foil) does not. The steady Glaser check carries no rain and no capillary flow, so it can give every variant the same margin — the choice between them for a stone, schist or earth wall insulated from inside needs a hygrothermal simulation to EN 15026 (WUFI, Delphin) or a tested system.',
+      'Where the blue temperature line drops below the dashed dew point, the wall is colder than the air inside it can stay clear of, and vapour condenses on that plane. Move the insulation to the outside of the mass and watch the crossing disappear: the mass then sits warm, on the inside of the barrier, which is the whole argument for external insulation stated in one picture.<br><br><b>What this is.</b> The Glaser method of EN ISO 13788 — steady state, one month, no moisture stored in the material, no capillary transport back out, no driving rain and no air leakage. Its own standard calls it a screening method, not a prediction of how wet a wall gets. It runs here at <b>%1 °C and %2 % RH</b> inside against <b>%3 °C and %4 % RH</b> outside, that outdoor temperature being θ<sub>ext,i</sub> for this site, the mean of the coldest month of the heating season.<br><br><b>What the vapour numbers are worth.</b> The μ factors behind s<sub>d</sub> are the design values of EN ISO 10456 (Tabelas 3 and 4) wherever the table lists the material class, read on the dry cup for the layers on the warm side of the wall and on the wet cup for those on the cold side; thin sheets — films, foils, paints, breathable membranes — come from its Tabela 5 as s<sub>d</sub> directly, and can be added from the <i>Membranes</i> group of the layer list. Hollow clay and concrete units, rammed earth, rubble masonry, the lightened slab and a tiled finish are not in that table; their rows are marked <i>indicative</i> in the table above and should not be quoted. These are tabulated class values: a real assessment uses the declared μ of the products specified, which can differ by a factor of two.<br><br><b>What it cannot tell apart.</b> Old solid masonry wetted by driving rain dries by capillarity and vapour in both directions; an inside insulation open to vapour and capillary-active (wood fibre, cork, calcium silicate) lets it dry inwards, one closed to vapour (XPS, PUR, a foil) does not. The steady Glaser check carries no rain and no capillary flow, so it can give every variant the same margin — the choice between them for a stone, schist or earth wall insulated from inside needs a hygrothermal simulation to EN 15026 (WUFI, Delphin) or a tested system.',
       [fmt(GLASER_ENV.ti, 0), fmt(100 * GLASER_ENV.rhi, 0), fmt(Z.ti, 1), fmt(100 * GLASER_ENV.rhe, 0)]));
   });
 
@@ -10240,6 +10313,23 @@ Object.assign(PT, {
   "Rammed earth or adobe": "Taipa ou adobe",
   "Basalt stone masonry with lime mortar": "Alvenaria de pedra basáltica com argamassa de cal",
   "Own material (declared λ)": "Material próprio (λ declarado)",
+  "Membranes": "Membranas",
+  "Polyethylene film, 0.15 mm": "Película de polietileno, 0,15 mm",
+  "Polyethylene film, 0.25 mm": "Película de polietileno, 0,25 mm",
+  "Polyester film, 0.2 mm": "Película de poliéster, 0,2 mm",
+  "PVC sheet": "Folha de PVC",
+  "Aluminium foil, 0.05 mm": "Folha de alumínio, 0,05 mm",
+  "Bitumen-impregnated paper, 0.1 mm": "Papel betumado, 0,1 mm",
+  "Breathable membrane": "Membrana respirável",
+  "Paint, emulsion": "Tinta de emulsão",
+  "Paint, gloss": "Tinta de esmalte (laca)",
+  "Vinyl wallpaper": "Papel de parede vinílico",
+  "Cup": "Campo",
+  "Source": "Fonte",
+  "wet (cold side)": "húmido (lado frio)",
+  "dry (warm side)": "seco (lado quente)",
+  "declared by the student": "declarado pelo aluno",
+  "indicative — not in EN ISO 10456": "indicativo — não consta da EN ISO 10456",
   "of layer": "da camada",
   "Other": "Outro",
   "A neighbouring dwelling": "Uma habitação vizinha",
@@ -10724,7 +10814,7 @@ Object.assign(PT_HINT, {
   'wallint-films':
     'As duas faces desta parede são interiores, pelo que ambas tomam R<sub>si</sub> = 0,13 e nenhuma toma R<sub>se</sub>. Só isso vale mais 0,09 (m²·°C)/W do que a mesma parede construída no exterior do edifício.',
   'wall-glaser-note':
-    'Onde a linha azul da temperatura desce abaixo do ponto de orvalho tracejado, a parede está mais fria do que o ar no seu interior consegue suportar sem condensar, e o vapor condensa nesse plano. Passe o isolamento para o exterior da massa e veja o cruzamento desaparecer: a massa fica então quente, do lado de dentro da barreira, que é todo o argumento a favor do isolamento pelo exterior dito numa só imagem.<br><br><b>O que isto é.</b> O método de Glaser da EN ISO 13788 — regime permanente, um mês, sem humidade armazenada no material, sem transporte capilar de retorno, sem chuva incidente e sem infiltração de ar. A própria norma lhe chama método de despiste, e não previsão de quão húmida uma parede fica. Corre aqui a <b>%1 °C e %2 % HR</b> no interior contra <b>%3 °C e %4 % HR</b> no exterior, sendo essa temperatura exterior o θ<sub>ext,i</sub> deste local, a média do mês mais frio da estação de aquecimento.<br><br><b>Quanto valem os números de vapor.</b> Os factores μ que estão por trás de s<sub>d</sub> são valores genéricos para cada classe de material, não são dados declarados de produto nem transcrições da EN ISO 10456. Chegam para colocar o plano de condensação na camada certa e para mostrar para que lado ele se desloca; não chegam para ser citados. Uma avaliação a sério usa o μ declarado dos produtos especificados, e a diferença entre um valor genérico e um declarado é correntemente de um factor de dois.<br><br><b>O que não consegue distinguir.</b> A alvenaria antiga maciça molhada pela chuva batida seca por capilaridade e por vapor nos dois sentidos; um isolamento interior aberto ao vapor e capilarmente activo (fibra de madeira, cortiça, silicato de cálcio) deixa-a secar para dentro, um fechado ao vapor (XPS, PUR, uma película) não. A verificação de Glaser, em regime estacionário, não leva chuva nem fluxo capilar, pelo que pode dar a todas as variantes a mesma margem — a escolha entre elas para uma parede de pedra, xisto ou terra isolada pelo interior pede uma simulação higrotérmica pela EN 15026 (WUFI, Delphin) ou um sistema ensaiado.',
+    'Onde a linha azul da temperatura desce abaixo do ponto de orvalho tracejado, a parede está mais fria do que o ar no seu interior consegue suportar sem condensar, e o vapor condensa nesse plano. Passe o isolamento para o exterior da massa e veja o cruzamento desaparecer: a massa fica então quente, do lado de dentro da barreira, que é todo o argumento a favor do isolamento pelo exterior dito numa só imagem.<br><br><b>O que isto é.</b> O método de Glaser da EN ISO 13788 — regime permanente, um mês, sem humidade armazenada no material, sem transporte capilar de retorno, sem chuva incidente e sem infiltração de ar. A própria norma lhe chama método de despiste, e não previsão de quão húmida uma parede fica. Corre aqui a <b>%1 °C e %2 % HR</b> no interior contra <b>%3 °C e %4 % HR</b> no exterior, sendo essa temperatura exterior o θ<sub>ext,i</sub> deste local, a média do mês mais frio da estação de aquecimento.<br><br><b>Quanto valem os números de vapor.</b> Os factores μ por trás de s<sub>d</sub> são os valores de cálculo da EN ISO 10456 (Tabelas 3 e 4) sempre que a tabela lista a classe do material, lidos em campo seco para as camadas do lado quente da parede e em campo húmido para as do lado frio; as folhas finas — películas, folhas de alumínio, tintas, membranas respiráveis — vêm da sua Tabela 5 directamente como s<sub>d</sub>, e podem ser acrescentadas a partir do grupo <i>Membranas</i> da lista de camadas. Os blocos cerâmicos e de betão furados, a taipa, a alvenaria de pedra irregular, a laje aligeirada e o revestimento cerâmico não constam dessa tabela; as suas linhas vêm marcadas como <i>indicativas</i> no quadro acima e não devem ser citadas. São valores de classe tabelados: uma avaliação a sério usa o μ declarado dos produtos especificados, que pode diferir num factor de dois.<br><br><b>O que não consegue distinguir.</b> A alvenaria antiga maciça molhada pela chuva batida seca por capilaridade e por vapor nos dois sentidos; um isolamento interior aberto ao vapor e capilarmente activo (fibra de madeira, cortiça, silicato de cálcio) deixa-a secar para dentro, um fechado ao vapor (XPS, PUR, uma película) não. A verificação de Glaser, em regime estacionário, não leva chuva nem fluxo capilar, pelo que pode dar a todas as variantes a mesma margem — a escolha entre elas para uma parede de pedra, xisto ou terra isolada pelo interior pede uma simulação higrotérmica pela EN 15026 (WUFI, Delphin) ou um sistema ensaiado.',
   'wallint-el':
     'A linha destacada é aquilo que esta parede é, face à resposta dada acima sobre o que fica do outro lado. As duas linhas EL3 descrevem uma divisória inteiramente contida numa fracção — uma parede entre dois compartimentos da mesma habitação — que é um elemento diferente daquele de que esta página trata, e nenhuma delas é alcançável a partir daqui.',
   'wallint-it-partial':
