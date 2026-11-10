@@ -35,6 +35,15 @@ Each photograph is a file, `photos/<material>.jpg`; its author, licence and sour
 
 Five entries were added at students' request, for the traditional wall and roof: basalt stone masonry with lime mortar, timber roof structure, traditional clay roof tile, lime render and interior lime plaster. They are available in every layer selector and in the mosaic. **These five figures are not ITE 50 values.** Tile and lime are conventional figures of the EN ISO 10456 order; the masonry λ is derived from about 80 % basalt and 20 % lime mortar; the roof structure carries a fixed R = 0,18 (m²·°C)/W for rafters at about 13 % of the plan with air between them, so it does not count as solid timber. They are for teaching and should be replaced by measured or declared figures in real work.
 
+### Glazing library (v2.60.0–v2.61.0)
+
+Besides the 36 coated double units, the glazing library carries:
+
+- **Ordinary clear double glazing** as the Manual SCE prints it: U<sub>g</sub> 2,80 (Tabela 46) and g 0,78 or 0,75 (Tabela 51). The Manual gives no light transmission for it, so TL reads "—" and these are never suggested.
+- From Saint-Gobain Glass, *O Essencial do Vidro — Fachadas* (values to EN 410 and EN 673, PLANICLEAR panes): **single 6 mm glass with a solar-control coating** (U<sub>g</sub> 5,2–5,7), **double glazing without a low-e coating** (6|16|4, argon, U<sub>g</sub> 2,6) and **triple glazing** (6|12|4|12|4, argon, low-e on face #5, U<sub>g</sub> 0,7–1,0) — low-e, triple-silver, double-silver, single-silver and temperable solar-control units.
+
+The summer angular correction F<sub>w,v</sub> follows Manual SCE Tabela 50 by the number of panes: its single-glass row, its double-glass row, and 0,90 for triple units ("nos restantes casos"). Entries are appended to the list, never inserted, because a saved assessment stores its glass by position.
+
 ### Other sources cited
 
 A few other works are drawn on for specific figures but are commercially published and copyrighted, so only the citation is given here — the same one the app's own footer shows:

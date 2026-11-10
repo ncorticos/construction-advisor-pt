@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.60.0',
+  version:     '2.61.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -2048,8 +2048,8 @@ const XJ = { N:0.27, NE:0.33, E:0.56, SE:0.84, S:1.00, SW:0.84, W:0.56, NW:0.33,
 /* v2.44.0: angular-selectivity corrections on admitted solar energy. Manual
    SCE Eq. 25 sets the winter solar factor to gi = 0.90 × g⊥,vi without
    permanent devices; Tabela 50 sets the summer correction Fw,v per
-   orientation (double-glazing row — the whole library is double glazing;
-   horizontal takes the 0.90 footnote value). Admitted energy per m² of glass
+   orientation (double-glazing row here; v2.61.0: single and triple units read
+   their own row through fwvOf; horizontal takes the 0.90 footnote value). Admitted energy per m² of glass
    is therefore Gsul·Xj·M·0.90·g in heating and Gsol·Fw,v·g in cooling. */
 const FWI = 0.90;
 const FWV = { N:0.80, NE:0.85, E:0.85, SE:0.85, S:0.75, SW:0.85, W:0.85, NW:0.85, H:0.90 };
@@ -2082,6 +2082,23 @@ const GLAZ_FAMILY = {
      no light transmission or reflection, so those read «—» and these two never stand as a suggestion */
   plain:  { name:'Ordinary clear double glazing (Manual SCE)',      rank:0, manual:true,
             role:'Two clear panes and an air gap, no coating: the default the Manual SCE sets where nothing better is known. It loses about two and a half times what a low-e unit does.' },
+  /* v2.61.0: from Saint-Gobain Glass, «O Essencial do Vidro — Fachadas» (EN 410 / EN 673; 6 mm monolithic,
+     6|16|4 mm double with 90 % argon, 6|12|4|12|4 mm triple with 90 % argon and a low-e coating on face #5;
+     all panes PLANICLEAR). panes sets the Manual SCE Tabela 50 row the summer correction reads. */
+  single: { name:'Single glazing with a solar-control coating (6 mm)', rank:0, panes:1,
+            role:'One coated pane, no cavity: what a renovation keeps when the frame cannot take a double unit. Six times the loss of a good double unit.' },
+  clear2: { name:'Double glazing without low-e coating (argon)',     rank:0,
+            role:'Two clear panes with argon and no low-e coating: high light and solar gain, the thermal performance of an ordinary unit.' },
+  tri_lowe:   { name:'Low-emissivity triple glazing',                rank:1, panes:3,
+            role:'Three clear panes, two argon cavities and a low-e coating: the warmest unit that still collects winter sun.' },
+  tri_solar3: { name:'Triple-silver solar-control triple glazing',   rank:4, panes:3,
+            role:'The most selective coating in a triple unit: the lowest U together with the lowest solar factor for the daylight kept.' },
+  tri_solar2: { name:'Double-silver solar-control triple glazing',   rank:3, panes:3,
+            role:'Two silver layers in a triple unit: strong solar control, high light, very low U.' },
+  tri_solar1: { name:'Solar-control triple glazing, moderate selectivity', rank:2, panes:3,
+            role:'A single-silver control layer in a triple unit: cuts solar gain at a lower selectivity.' },
+  tri_st:     { name:'Solar-control triple glazing, temperable coating', rank:2, panes:3,
+            role:'A hard, temperable control coating in a triple unit: the widest range of looks and processing.' },
   refl:   { name:'Reflective solar-control double glazing',         rank:2,
             role:'High exterior light reflection. Strong control and a mirrored façade; the least selective of the coated build-ups.' }
 };
@@ -2124,8 +2141,58 @@ const GLAZING = [
   { f:'refl', ug:1.1, tl:20, g:0.18, rle:21, rli:29, st:1 },
   /* appended, never inserted: a study stores its glass by its place in this list */
   { f:'plain', ug:2.8, tl:null, g:0.78, rle:null, rli:null, cfg:'4–8 mm + 4 mm' },
-  { f:'plain', ug:2.8, tl:null, g:0.75, rle:null, rli:null, cfg:'4–8 mm + 5 mm' }
+  { f:'plain', ug:2.8, tl:null, g:0.75, rle:null, rli:null, cfg:'4–8 mm + 5 mm' },
+  /* v2.61.0, appended: Saint-Gobain Glass, «O Essencial do Vidro — Fachadas», PLANICLEAR columns. ref names the
+     product the figures are printed for; the app reads only the figures. */
+  { f:'single', ug:5.7, tl:67, g:0.71, rle:30, rli:31, st:1, cfg:'6 mm', ref:'COOL-LITE ST Bright Silver DIAMANT' },
+  { f:'single', ug:5.7, tl:67, g:0.69, rle:30, rli:31, st:1, cfg:'6 mm', ref:'COOL-LITE ST Bright Silver' },
+  { f:'single', ug:5.6, tl:67, g:0.69, rle:19, rli:19, cfg:'6 mm', ref:'COOL-LITE ST 167' },
+  { f:'single', ug:5.6, tl:51, g:0.56, rle:18, rli:17, cfg:'6 mm', ref:'COOL-LITE ST 150' },
+  { f:'single', ug:5.5, tl:37, g:0.44, rle:22, rli:18, cfg:'6 mm', ref:'COOL-LITE ST 136' },
+  { f:'single', ug:5.4, tl:36, g:0.44, rle:18, rli:15, cfg:'6 mm', ref:'COOL-LITE STB 136' },
+  { f:'single', ug:5.2, tl:21, g:0.30, rle:32, rli:26, st:1, cfg:'6 mm', ref:'COOL-LITE ST 120' },
+  { f:'single', ug:5.2, tl:22, g:0.32, rle:21, rli:29, cfg:'6 mm', ref:'COOL-LITE STB 120' },
+  { f:'clear2', ug:2.6, tl:79, g:0.76, rle:18, rli:18, cfg:'6|16|4 Ar', ref:'BIOCLEAN II' },
+  { f:'clear2', ug:2.6, tl:77, g:0.74, rle:17, rli:17, cfg:'6|16|4 Ar', ref:'BIOCLEAN' },
+  { f:'tri_lowe', ug:1.0, tl:72, g:0.57, rle:20, rli:19, cfg:'6|12|4|12|4 Ar', ref:'BIOCLEAN II + PLANITHERM XN #5' },
+  { f:'tri_lowe', ug:1.0, tl:70, g:0.55, rle:20, rli:19, cfg:'6|12|4|12|4 Ar', ref:'BIOCLEAN + PLANITHERM XN #5' },
+  { f:'tri_solar3', ug:0.7, tl:63, g:0.31, rle:13, rli:16, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE XTREME 70/33' },
+  { f:'tri_solar3', ug:0.7, tl:55, g:0.27, rle:12, rli:16, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE XTREME 61/29' },
+  { f:'tri_solar3', ug:0.7, tl:43, g:0.19, rle:17, rli:20, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE XTREME 50/22 II' },
+  { f:'tri_solar2', ug:0.7, tl:67, g:0.37, rle:14, rli:16, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 183' },
+  { f:'tri_solar2', ug:0.7, tl:63, g:0.33, rle:16, rli:17, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 175' },
+  { f:'tri_solar2', ug:0.7, tl:63, g:0.34, rle:15, rli:17, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 176' },
+  { f:'tri_solar2', ug:0.7, tl:55, g:0.32, rle:18, rli:20, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 165' },
+  { f:'tri_solar2', ug:0.7, tl:47, g:0.26, rle:20, rli:23, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 154' },
+  { f:'tri_solar2', ug:0.7, tl:38, g:0.21, rle:21, rli:17, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE SKN 144 II' },
+  { f:'tri_solar1', ug:0.8, tl:52, g:0.39, rle:16, rli:13, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KNT 164' },
+  { f:'tri_solar1', ug:0.8, tl:43, g:0.32, rle:18, rli:14, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KNT 155' },
+  { f:'tri_solar1', ug:0.7, tl:39, g:0.26, rle:34, rli:21, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KS 146 II' },
+  { f:'tri_solar1', ug:0.7, tl:40, g:0.28, rle:44, rli:36, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KS 147' },
+  { f:'tri_solar1', ug:0.8, tl:34, g:0.25, rle:24, rli:15, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KNT 140' },
+  { f:'tri_solar1', ug:0.7, tl:33, g:0.23, rle:40, rli:22, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KS 138 II' },
+  { f:'tri_solar1', ug:0.7, tl:32, g:0.25, rle:34, rli:31, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KG 137 (tempered)' },
+  { f:'tri_solar1', ug:0.7, tl:32, g:0.25, rle:31, rli:29, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE KG 137 (annealed)' },
+  { f:'tri_st', ug:1.0, tl:58, g:0.49, rle:36, rli:34, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST Bright Silver DIAMANT' },
+  { f:'tri_st', ug:1.0, tl:57, g:0.47, rle:35, rli:33, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST Bright Silver' },
+  { f:'tri_st', ug:1.0, tl:56, g:0.45, rle:24, rli:25, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST 167' },
+  { f:'tri_st', ug:1.0, tl:42, g:0.35, rle:21, rli:23, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST 150' },
+  { f:'tri_st', ug:1.0, tl:31, g:0.26, rle:24, rli:24, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST 136' },
+  { f:'tri_st', ug:1.0, tl:30, g:0.26, rle:19, rli:22, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE STB 136' },
+  { f:'tri_st', ug:1.0, tl:18, g:0.16, rle:33, rli:29, st:1, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE ST 120' },
+  { f:'tri_st', ug:1.0, tl:19, g:0.17, rle:22, rli:32, cfg:'6|12|4|12|4 Ar', ref:'COOL-LITE STB 120' }
 ];
+/** The panes of a unit — 1, 2 or 3 — by its family. */
+const glazPanes = p => (GLAZ_FAMILY[p.f] && GLAZ_FAMILY[p.f].panes) || 2;
+/** The summer angular-selectivity correction for a unit, Manual SCE Tabela 50: its own row for single and double
+    glass; «nos restantes casos» — a triple unit, a horizontal opening — 0,90. */
+const FWV1 = { N:0.85, NE:0.90, E:0.90, SE:0.90, S:0.80, SW:0.90, W:0.90, NW:0.90, H:0.90 };
+const fwvOf = (p, o) => { const n = glazPanes(p); return n === 1 ? FWV1[o] : n === 3 ? 0.90 : FWV[o]; };
+/** The library as option groups, family by family: single, double, triple. */
+const glazOptions = () => { const fams = Object.keys(GLAZ_FAMILY).sort((a, b) => (GLAZ_FAMILY[a].panes || 2) - (GLAZ_FAMILY[b].panes || 2));
+  return fams.map(f => ({ group:GLAZ_FAMILY[f].name, items:GLAZING.map((p, i) => ({ p, i })).filter(q => q.p.f === f)
+    .map(q => ({ value:String(q.i), label:(q.p.cfg ? q.p.cfg + ' — ' : '') + 'Ug ' + fmt(q.p.ug, 1) + ', TL ' + tlTxt(q.p) + ', g ' + fmt(q.p.g, 2) + (q.p.st ? ' · ' + t('mirror') : '') })) }))
+    .filter(g => g.items.length); };
 /** The selectivity index: light admitted per unit of solar heat. */
 const glazIS = p => p.tl === null || p.tl === undefined ? NaN : p.tl / (100 * p.g);
 const tlTxt = p => p.tl === null || p.tl === undefined ? '—' : p.tl + ' %';
@@ -4335,10 +4402,7 @@ function buildWindows(host) {
 
     /* --- controls --------------------------------------------------------- */
     frag.appendChild(controls([
-      selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
-        value:String(i),
-        label: t(GLAZ_FAMILY[p.f].name) + (p.cfg ? ' ' + p.cfg : '') + ' — U ' + fmt(p.ug, 1) + ', T' + t('L') + ' ' + tlTxt(p) + ', g ' + fmt(p.g, 2)
-      })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
+      selectCtl(t('Glazing'), glazOptions(), String(S.glaz), v => { S.glaz = +v; rerender(); }, 360),
       selectCtl(t('Frame'), FRAMES.map(f => ({ value:f.key, label:t(f.name) })), S.frame,
         v => { S.frame = v; rerender(); }),
       checkCtl(t('With glazing bars'), S.quad, v => { S.quad = v; rerender(); }),
@@ -4444,7 +4508,7 @@ function buildWindows(host) {
     /* --- gain by orientation (kept as data: the suggestion stats below read
            win[oi]/sum[oi]/heat1/cool1; v2.48.0 removed the chart panel) ------ */
     const win = ORI8.map(o => Z.gsul * XJ[o] * Z.M * FWI * G.g);
-    const sum = ORI8.map((o, i) => Z.gsol[i] * FWV[o] * G.g);
+    const sum = ORI8.map((o, i) => Z.gsol[i] * fwvOf(G, o) * G.g);
     const ORI9 = ORI8.concat(['H']);
     const win9 = win.concat([Z.gsul * XJ.H * Z.M * FWI * G.g]);
     const sum9 = sum.concat([Z.gsolH * FWV.H * G.g]);
@@ -4526,14 +4590,14 @@ function buildWindows(host) {
     const cool1 = Z.gsol[oi] * FWV[ORI8[oi]];
     const loadRatio = heat1 > 0 ? cool1 / heat1 : Infinity;
     const bySelect = loadRatio >= 1;
-    const best = GLAZING.map((p, i) => ({ p, i, is:glazIS(p) })).filter(q => !GLAZ_FAMILY[q.p.f].manual)
+    const best = GLAZING.map((p, i) => ({ p, i, is:glazIS(p) })).filter(q => !GLAZ_FAMILY[q.p.f].manual && glazPanes(q.p) > 1)
       .sort((a, b) => bySelect ? b.is - a.is : b.p.g - a.p.g)[0];
     /* Saint-Gobain's own naming for the two technologies this library
        models — a real, stable brand fact, not a claim that a given SKU
        matches these exact figures today. Set as a pill, the same way a
        verdict or a “mirrored” flag already reads at a glance elsewhere on
        this page, rather than left to surface in the middle of a sentence. */
-    const brand = best.p.f === 'lowe' ? 'Planitherm' : 'Cool-Lite';
+    const brand = best.p.f === 'lowe' || best.p.f === 'tri_lowe' ? 'Planitherm' : best.p.f === 'clear2' ? 'Bioclean' : 'Cool-Lite';
     const chipRow = (...labels) => el('div', { style:'display:flex;gap:8px;flex-wrap:wrap;margin:10px 0' },
       labels.map(label => el('span', { class:'pill empty', text:label })));
     frag.appendChild(stats([
@@ -5473,10 +5537,7 @@ function buildShading(host) {
     const gt = missing.length ? null : G.g * ord;
     const limG = gtotMax(Z, S.inertia);
     frag.appendChild(controls([
-      selectCtl(t('Glazing'), GLAZING.map((p, i) => ({
-        value:String(i),
-        label:t(GLAZ_FAMILY[p.f].name) + (p.cfg ? ' ' + p.cfg : '') + ' — U ' + fmt(p.ug, 1) + ', TL ' + tlTxt(p) + ', g ' + fmt(p.g, 2)
-      })), String(S.glaz), v => { S.glaz = +v; rerender(); }, 330),
+      selectCtl(t('Glazing'), glazOptions(), String(S.glaz), v => { S.glaz = +v; rerender(); }, 360),
       selectCtl(t('Colour of the devices'), COLOURS.map(c => ({ value:c.key, label:t(c.name) })),
         S.colour, v => { S.colour = v; rerender(); }),
       checkCtl(t('Double glazing'), S.dbl, v => { S.dbl = v; rerender(); }),
@@ -10212,6 +10273,21 @@ Object.assign(PT, {
   "Without a calculated or declared value, the Manual SCE gives these defaults by door type (Tabela 32): metal 7,30; metal with insulated metal panels 4,50; timber 2,70; PVC 2,50; fire door 2,50 W/(m²·°C). They include both surface resistances for a door to the outside; a door to an unheated space takes the inside film on both faces instead. A manufacturer’s value counts only if calculated or tested to EN 14351-1. The Architecture Advisor’s doors include glazed ones — keep here only the opaque ones.": "Sem valor calculado ou declarado, o Manual SCE dá estes valores por defeito por tipo de porta (Tabela 32): metálica 7,30; metálica com painéis metálicos com núcleo isolante 4,50; madeira 2,70; PVC 2,50; corta-fogo 2,50 W/(m²·°C). Incluem as duas resistências superficiais de uma porta para o exterior; uma porta para um espaço não útil leva a resistência interior nas duas faces. Um valor do fabricante só conta se for calculado ou ensaiado pela EN 14351-1. As portas do Architecture Advisor incluem as envidraçadas — deixe aqui só as opacas.",
   "Ordinary clear double glazing (Manual SCE)": "Vidro duplo incolor corrente (Manual SCE)",
   "Two clear panes and an air gap, no coating: the default the Manual SCE sets where nothing better is known. It loses about two and a half times what a low-e unit does.": "Dois vidros incolores e uma lâmina de ar, sem revestimento: o valor por defeito do Manual SCE quando não há melhor informação. Perde cerca de duas vezes e meia o que perde um vidro de baixa emissividade.",
+  "Single glazing with a solar-control coating (6 mm)": "Vidro simples com capa de controlo solar (6 mm)",
+  "One coated pane, no cavity: what a renovation keeps when the frame cannot take a double unit. Six times the loss of a good double unit.": "Um só vidro com capa, sem caixa de ar: o que uma reabilitação mantém quando o caixilho não recebe um vidro duplo. Seis vezes a perda de um bom vidro duplo.",
+  "Double glazing without low-e coating (argon)": "Vidro duplo sem capa de baixa emissividade (árgon)",
+  "Two clear panes with argon and no low-e coating: high light and solar gain, the thermal performance of an ordinary unit.": "Dois vidros incolores com árgon, sem capa de baixa emissividade: muita luz e ganho solar, o desempenho térmico de um vidro duplo corrente.",
+  "Low-emissivity triple glazing": "Vidro triplo de baixa emissividade",
+  "Three clear panes, two argon cavities and a low-e coating: the warmest unit that still collects winter sun.": "Três vidros incolores, duas caixas de árgon e uma capa de baixa emissividade: a unidade mais isolante que ainda capta o sol de inverno.",
+  "Triple-silver solar-control triple glazing": "Vidro triplo de controlo solar de prata tripla",
+  "The most selective coating in a triple unit: the lowest U together with the lowest solar factor for the daylight kept.": "A capa mais seletiva numa unidade tripla: o U mais baixo com o menor fator solar para a luz que deixa passar.",
+  "Double-silver solar-control triple glazing": "Vidro triplo de controlo solar de prata dupla",
+  "Two silver layers in a triple unit: strong solar control, high light, very low U.": "Duas camadas de prata numa unidade tripla: forte controlo solar, muita luz, U muito baixo.",
+  "Solar-control triple glazing, moderate selectivity": "Vidro triplo de controlo solar, seletividade moderada",
+  "A single-silver control layer in a triple unit: cuts solar gain at a lower selectivity.": "Uma camada de prata simples numa unidade tripla: reduz o ganho solar com menor seletividade.",
+  "Solar-control triple glazing, temperable coating": "Vidro triplo de controlo solar, capa temperável",
+  "A hard, temperable control coating in a triple unit: the widest range of looks and processing.": "Uma capa de controlo dura e temperável numa unidade tripla: a maior variedade de aspeto e de transformação.",
+  "mirror": "espelhado",
   "Schist (slate)": "Xisto (ardósia)", "Schist stone masonry with clay or lime mortar": "Alvenaria de pedra de xisto com argamassa de barro ou cal",
   "Cross-laminated timber, CLT": "Madeira lamelada-colada cruzada, CLT",
   "Tick these only for a fan that runs <b>continuously, or without depending on the occupant</b> (a timer, a humidistat, a central extract unit). A cooker hood or a bathroom fan switched on by hand does not count towards R<sub>ph</sub> (Manual SCE §9.1.5) — counted, it lifts the rate to a figure a certificate would not accept.": "Assinale apenas um ventilador que funcione <b>em contínuo, ou sem depender do ocupante</b> (temporizador, higrostato, unidade central de extração). Um exaustor de cozinha ou um ventilador de casa de banho ligado à mão não conta para a R<sub>ph</sub> (Manual SCE §9.1.5) — contado, eleva a taxa a um valor que um certificado não aceitaria.",
