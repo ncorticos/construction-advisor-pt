@@ -44,6 +44,14 @@ Besides the 36 coated double units, the glazing library carries:
 
 The summer angular correction F<sub>w,v</sub> follows Manual SCE Tabela 50 by the number of panes: its single-glass row, its double-glass row, and 0,90 for triple units ("nos restantes casos"). Entries are appended to the list, never inserted, because a saved assessment stores its glass by position.
 
+### Vapour resistance (v2.62.0)
+
+The Glaser check (EN ISO 13788) on the external-wall page reads μ from **EN ISO 10456**, Tabelas 3 and 4 (UNI EN ISO 10456, Portuguese transcription by AIPE), wherever the table lists the material class: concrete, timber and CLT, AAC, lightweight-aggregate concrete, granite, basalt, limestone, slate (schist), natural stone slab, EPS, XPS, mineral wool, PUR, cork, wood-fibre board, cement, lime and gypsum renders, plasterboard, mortar/screed, bitumen membrane, clay tile, steel. Each such material carries both design values; a layer on the warm side of the wall's thermal midpoint takes the dry-cup value (0/50 % RH), one on the cold side the wet-cup value (50/93 % RH).
+
+Thin sheets come from its **Tabela 5** as s<sub>d</sub> directly and are added from a *Membranes* group in the layer list: polyethylene 0,15 and 0,25 mm (50 and 100 m), polyester film (50 m), PVC sheet (30 m), aluminium foil 0,05 mm (1500 m), bitumen paper (2 m), breathable membrane (0,2 m), emulsion and gloss paint (0,1 and 3 m), vinyl wallpaper (2 m). They have no thermal role (R = 0).
+
+Not in that table, and shown in the panel as *indicative*: hollow clay and concrete units, solid brick, rammed earth, rubble stone masonry, the lightened slab, the timber roof structure, loose gravel ballast and a tiled finish (the table gives ∞ for the tile body, which ignores the joints). A per-layer table under the Glaser chart shows μ, the cup used, s<sub>d</sub> and the source row.
+
 ### Other sources cited
 
 A few other works are drawn on for specific figures but are commercially published and copyrighted, so only the citation is given here — the same one the app's own footer shows:
