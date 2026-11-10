@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.58.0',
+  version:     '2.59.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1927,7 +1927,8 @@ const MAT_MU = {
   eps:60, xps:150, mw:1, pur:60, icb:10, fibrom:5,
   reboco:20, estuque:10, gesso:10, ceramico:300, pedran:250, soalho:50, betonilha:20,
   imperm:50000, seixo:1,
-  telha:40, madcob:5, albasalto:30, rebcal:10, estcal:10
+  telha:40, madcob:5, albasalto:30, rebcal:10, estcal:10,
+  xisto:800, alxisto:30, clt:50
 };
 /** The indoor and outdoor conditions the Glaser check is run at, ISO 13788. */
 const GLASER_ENV = { ti:20, rhi:0.50, rhe:0.80 };
@@ -1962,6 +1963,13 @@ const MATERIALS = [
   { key:'pedrab',   group:'Masonry',   name:'Basalt',                              lam:1.60, rho:2700 },
   { key:'taipa',    group:'Masonry',   name:'Rammed earth or adobe',               lam:1.10, rho:1700 },
   { key:'albasalto',group:'Masonry',   name:'Basalt stone masonry with lime mortar', lam:1.40, rho:2500 },
+  /* v2.59.0: schist and CLT, NOT ITE 50 transcriptions. xisto: slate, EN ISO 10456 (λ 2,2; 2000–2800 kg/m³).
+     alxisto: derived as albasalto is, about 80 % schist (λ 2,2) + 20 % clay or lime mortar (λ 0,8), between the
+     series and parallel bounds, 1,63 and 1,92. clt: softwood of EN ISO 10456 (λ 0,13 at about 500 kg/m³) —
+     a CLT panel's declared value replaces it. */
+  { key:'xisto',    group:'Masonry',   name:'Schist (slate)',                       lam:2.20, rho:2400 },
+  { key:'alxisto',  group:'Masonry',   name:'Schist stone masonry with clay or lime mortar', lam:1.75, rho:2200 },
+  { key:'clt',      group:'Structure', name:'Cross-laminated timber, CLT',          lam:0.13, rho:470 },
   /* ---- insulation ---- */
   { key:'eps',      group:'Insulation',name:'Expanded polystyrene, EPS',           lam:0.040, rho:20, ins:1 },
   { key:'xps',      group:'Insulation',name:'Extruded polystyrene, XPS',           lam:0.037, rho:35, ins:1 },
@@ -4011,7 +4019,7 @@ function glaserPanel(host, state, Z) {
     });
 
     frag.appendChild(hint('wall-glaser-note',
-      'Where the blue temperature line drops below the dashed dew point, the wall is colder than the air inside it can stay clear of, and vapour condenses on that plane. Move the insulation to the outside of the mass and watch the crossing disappear: the mass then sits warm, on the inside of the barrier, which is the whole argument for external insulation stated in one picture.<br><br><b>What this is.</b> The Glaser method of EN ISO 13788 — steady state, one month, no moisture stored in the material, no capillary transport back out, no driving rain and no air leakage. Its own standard calls it a screening method, not a prediction of how wet a wall gets. It runs here at <b>%1 °C and %2 % RH</b> inside against <b>%3 °C and %4 % RH</b> outside, that outdoor temperature being θ<sub>ext,i</sub> for this site, the mean of the coldest month of the heating season.<br><br><b>What the vapour numbers are worth.</b> The μ factors behind s<sub>d</sub> are generic figures for each material class, not declared product data and not transcribed from EN ISO 10456. They are good enough to put the condensation plane in the right layer and to show which way it moves; they are not good enough to quote. A real assessment uses the declared μ of the products specified, and the gap between a generic value and a declared one is routinely a factor of two.',
+      'Where the blue temperature line drops below the dashed dew point, the wall is colder than the air inside it can stay clear of, and vapour condenses on that plane. Move the insulation to the outside of the mass and watch the crossing disappear: the mass then sits warm, on the inside of the barrier, which is the whole argument for external insulation stated in one picture.<br><br><b>What this is.</b> The Glaser method of EN ISO 13788 — steady state, one month, no moisture stored in the material, no capillary transport back out, no driving rain and no air leakage. Its own standard calls it a screening method, not a prediction of how wet a wall gets. It runs here at <b>%1 °C and %2 % RH</b> inside against <b>%3 °C and %4 % RH</b> outside, that outdoor temperature being θ<sub>ext,i</sub> for this site, the mean of the coldest month of the heating season.<br><br><b>What the vapour numbers are worth.</b> The μ factors behind s<sub>d</sub> are generic figures for each material class, not declared product data and not transcribed from EN ISO 10456. They are good enough to put the condensation plane in the right layer and to show which way it moves; they are not good enough to quote. A real assessment uses the declared μ of the products specified, and the gap between a generic value and a declared one is routinely a factor of two.<br><br><b>What it cannot tell apart.</b> Old solid masonry wetted by driving rain dries by capillarity and vapour in both directions; an inside insulation open to vapour and capillary-active (wood fibre, cork, calcium silicate) lets it dry inwards, one closed to vapour (XPS, PUR, a foil) does not. The steady Glaser check carries no rain and no capillary flow, so it can give every variant the same margin — the choice between them for a stone, schist or earth wall insulated from inside needs a hygrothermal simulation to EN 15026 (WUFI, Delphin) or a tested system.',
       [fmt(GLASER_ENV.ti, 0), fmt(100 * GLASER_ENV.rhi, 0), fmt(Z.ti, 1), fmt(100 * GLASER_ENV.rhe, 0)]));
   });
 
@@ -4520,7 +4528,9 @@ const IAQ_VENT_STATE = {
   driver:'stack', customDP:10,
   wclass:2, aw:2.0,
   openType:'none', openArea:500, openQ:20, openX:10,
-  kitchen:true, bathrooms:1
+  /* off until the student says there is a fan that runs on its own: a cooker hood or a bathroom fan switched by hand
+     does not count (Manual SCE §9.1.5) */
+  kitchen:false, bathrooms:0
 };
 
 function buildIAQ(host) {
@@ -4850,6 +4860,7 @@ function buildIAQ(host) {
         checkCtl(t('Kitchen') + ' (' + fmt(IAQ_VENT_DEFAULT.kitchen, 0) + ' m³/h)', V.kitchen, v => { V.kitchen = v; rerender(); }),
         numCtl(t('Bathrooms') + ' (' + fmt(IAQ_VENT_DEFAULT.bathroom, 0) + ' m³/h ' + t('each') + ')', 0, 10, 1, V.bathrooms, v => { V.bathrooms = v; rerender(); })
       ]));
+      frag.appendChild(el('p', { class:'hint', html:t('Tick these only for a fan that runs <b>continuously, or without depending on the occupant</b> (a timer, a humidistat, a central extract unit). A cooker hood or a bathroom fan switched on by hand does not count towards R<sub>ph</sub> (Manual SCE §9.1.5) — counted, it lifts the rate to a figure a certificate would not accept.') }));
 
       frag.appendChild(stats([
         statCard('Q window', fmt(qWindow, 0), 'm³/h', t('Eq. 171')),
@@ -8392,6 +8403,7 @@ const MAT_ZONE = {
   pedrag:['Norte','Centro'], pedrac:['Centro','Sul'], pedrab:['Sul','Madeira','Açores'],
   pedran:['Nationwide'], taipa:['Centro','Sul'],
   albasalto:['Sul','Madeira','Açores'], madcob:['Norte','Centro','Açores'],
+  xisto:['Norte','Centro'], alxisto:['Norte','Centro'], clt:['Nationwide'],
   telha:['Nationwide'], rebcal:['Nationwide'], estcal:['Nationwide'],
   madeirae:['Norte','Centro','Açores'], madeirad:['Norte','Centro'], soalho:['Norte','Centro','Açores'],
   seixo:['Nationwide'], icb:['Sul'], fibrom:['Nationwide'],
@@ -8428,7 +8440,7 @@ const MAT_PRODUCERS = {
            { n:'Madeifatima', u:'https://www.madeifatima.com/pt', l:'' }]
 };
 const MAT_KIND = {};
-['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom','albasalto','madcob','rebcal','estcal']
+['pedrag','pedrac','pedrab','pedran','taipa','madeirae','madeirad','soalho','seixo','icb','fibrom','albasalto','madcob','rebcal','estcal','xisto','alxisto']
   .forEach(k => MAT_KIND[k] = 'natural');
 MATERIALS.forEach(m => { if (!MAT_KIND[m.key]) MAT_KIND[m.key] = 'industrial'; });
 const MAT_ORIGIN = {
@@ -8438,6 +8450,12 @@ const MAT_ORIGIN = {
           'Alvenaria tradicional e terra de cal — calcários de Lisboa, da Arrábida e do Algarve.'],
   pedrab:['Volcanic stone: the islands above all — Açores and Madeira — and the Lisboa volcanic complex.',
           'Pedra vulcânica: as ilhas acima de tudo — Açores e Madeira — e o complexo vulcânico de Lisboa.'],
+  xisto:['The schist country — the Douro, the Beira interior, the Pinhal and the Serra da Lousã: slabs of schist laid dry or in clay.',
+         'A terra do xisto — o Douro, a Beira interior, o Pinhal e a Serra da Lousã: lajes de xisto assentes a seco ou em barro.'],
+  alxisto:['The walls of the Aldeias do Xisto: schist bedded in clay or lime mortar, often 500–700 mm thick.',
+           'As paredes das Aldeias do Xisto: xisto assente em argamassa de barro ou de cal, muitas vezes com 500–700 mm.'],
+  clt:['Cross-laminated timber panels: an industrial product, made from softwood boards glued in crossed layers.',
+       'Painéis de madeira lamelada-colada cruzada: um produto industrial, de tábuas de resinosa coladas em camadas cruzadas.'],
   albasalto:['Thick load-bearing walls of the islands, often about 600 mm: basalt bedded in lime mortar.',
              'Paredes portantes espessas das ilhas, muitas vezes de cerca de 600 mm: basalto assente em argamassa de cal.'],
   madcob:['Rafters and purlins carrying tile directly: the traditional roof, with the air between them.',
@@ -10067,6 +10085,9 @@ Object.assign(PT, {
   "Basalt": "Basalto",
   "Rammed earth or adobe": "Taipa ou adobe",
   "Basalt stone masonry with lime mortar": "Alvenaria de pedra basáltica com argamassa de cal",
+  "Schist (slate)": "Xisto (ardósia)", "Schist stone masonry with clay or lime mortar": "Alvenaria de pedra de xisto com argamassa de barro ou cal",
+  "Cross-laminated timber, CLT": "Madeira lamelada-colada cruzada, CLT",
+  "Tick these only for a fan that runs <b>continuously, or without depending on the occupant</b> (a timer, a humidistat, a central extract unit). A cooker hood or a bathroom fan switched on by hand does not count towards R<sub>ph</sub> (Manual SCE §9.1.5) — counted, it lifts the rate to a figure a certificate would not accept.": "Assinale apenas um ventilador que funcione <b>em contínuo, ou sem depender do ocupante</b> (temporizador, higrostato, unidade central de extração). Um exaustor de cozinha ou um ventilador de casa de banho ligado à mão não conta para a R<sub>ph</sub> (Manual SCE §9.1.5) — contado, eleva a taxa a um valor que um certificado não aceitaria.",
   "Timber roof structure, rafters and air space, {} m": "Estrutura de madeira de cobertura, varas e caixa de ar, {} m",
   "Traditional clay roof tile": "Telha cerâmica tradicional",
   "Lime render": "Reboco de cal",
@@ -10500,7 +10521,7 @@ Object.assign(PT_HINT, {
   'wallint-films':
     'As duas faces desta parede são interiores, pelo que ambas tomam R<sub>si</sub> = 0,13 e nenhuma toma R<sub>se</sub>. Só isso vale mais 0,09 (m²·°C)/W do que a mesma parede construída no exterior do edifício.',
   'wall-glaser-note':
-    'Onde a linha azul da temperatura desce abaixo do ponto de orvalho tracejado, a parede está mais fria do que o ar no seu interior consegue suportar sem condensar, e o vapor condensa nesse plano. Passe o isolamento para o exterior da massa e veja o cruzamento desaparecer: a massa fica então quente, do lado de dentro da barreira, que é todo o argumento a favor do isolamento pelo exterior dito numa só imagem.<br><br><b>O que isto é.</b> O método de Glaser da EN ISO 13788 — regime permanente, um mês, sem humidade armazenada no material, sem transporte capilar de retorno, sem chuva incidente e sem infiltração de ar. A própria norma lhe chama método de despiste, e não previsão de quão húmida uma parede fica. Corre aqui a <b>%1 °C e %2 % HR</b> no interior contra <b>%3 °C e %4 % HR</b> no exterior, sendo essa temperatura exterior o θ<sub>ext,i</sub> deste local, a média do mês mais frio da estação de aquecimento.<br><br><b>Quanto valem os números de vapor.</b> Os factores μ que estão por trás de s<sub>d</sub> são valores genéricos para cada classe de material, não são dados declarados de produto nem transcrições da EN ISO 10456. Chegam para colocar o plano de condensação na camada certa e para mostrar para que lado ele se desloca; não chegam para ser citados. Uma avaliação a sério usa o μ declarado dos produtos especificados, e a diferença entre um valor genérico e um declarado é correntemente de um factor de dois.',
+    'Onde a linha azul da temperatura desce abaixo do ponto de orvalho tracejado, a parede está mais fria do que o ar no seu interior consegue suportar sem condensar, e o vapor condensa nesse plano. Passe o isolamento para o exterior da massa e veja o cruzamento desaparecer: a massa fica então quente, do lado de dentro da barreira, que é todo o argumento a favor do isolamento pelo exterior dito numa só imagem.<br><br><b>O que isto é.</b> O método de Glaser da EN ISO 13788 — regime permanente, um mês, sem humidade armazenada no material, sem transporte capilar de retorno, sem chuva incidente e sem infiltração de ar. A própria norma lhe chama método de despiste, e não previsão de quão húmida uma parede fica. Corre aqui a <b>%1 °C e %2 % HR</b> no interior contra <b>%3 °C e %4 % HR</b> no exterior, sendo essa temperatura exterior o θ<sub>ext,i</sub> deste local, a média do mês mais frio da estação de aquecimento.<br><br><b>Quanto valem os números de vapor.</b> Os factores μ que estão por trás de s<sub>d</sub> são valores genéricos para cada classe de material, não são dados declarados de produto nem transcrições da EN ISO 10456. Chegam para colocar o plano de condensação na camada certa e para mostrar para que lado ele se desloca; não chegam para ser citados. Uma avaliação a sério usa o μ declarado dos produtos especificados, e a diferença entre um valor genérico e um declarado é correntemente de um factor de dois.<br><br><b>O que não consegue distinguir.</b> A alvenaria antiga maciça molhada pela chuva batida seca por capilaridade e por vapor nos dois sentidos; um isolamento interior aberto ao vapor e capilarmente activo (fibra de madeira, cortiça, silicato de cálcio) deixa-a secar para dentro, um fechado ao vapor (XPS, PUR, uma película) não. A verificação de Glaser, em regime estacionário, não leva chuva nem fluxo capilar, pelo que pode dar a todas as variantes a mesma margem — a escolha entre elas para uma parede de pedra, xisto ou terra isolada pelo interior pede uma simulação higrotérmica pela EN 15026 (WUFI, Delphin) ou um sistema ensaiado.',
   'wallint-el':
     'A linha destacada é aquilo que esta parede é, face à resposta dada acima sobre o que fica do outro lado. As duas linhas EL3 descrevem uma divisória inteiramente contida numa fracção — uma parede entre dois compartimentos da mesma habitação — que é um elemento diferente daquele de que esta página trata, e nenhuma delas é alcançável a partir daqui.',
   'wallint-it-partial':
