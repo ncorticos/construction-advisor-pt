@@ -670,7 +670,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 const APP = {
   name:        'Construction Advisor PT',
   tabName:     'CA PT',   // short name for the browser tab, which truncates the full one
-  version:     '2.62.0',
+  version:     '2.63.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -2729,6 +2729,16 @@ const ORI8 = ['N','NE','E','SE','S','SW','W','NW'];
    The night-time average U_WDN adds the resistance of the closed device.
    ------------------------------------------------------------------------ */
 const uWindow = (ug, uf, fg) => fg * ug + (1 - fg) * (uf === null ? ug : uf);
+/** The window's U as the student sets it: the frame's Uf from Manual SCE Tabela 47, or the manufacturer's declared Uf in
+    its place; and Uw from Fg · Ug + (1 − Fg) · Uf, or the manufacturer's declared Uw (EN 14351-1), which then stands
+    for the whole window and the formula is not used. W is the window state (or a copy of it). */
+function winU(W, G, FR) {
+  const fg = W.quad ? FR.fgq : FR.fg, dUf = +W.ufDecl, dUw = +W.uwDecl;
+  const ufOwn = FR.uf !== null && W.ufDecl !== null && W.ufDecl !== undefined && W.ufDecl !== '' && isFinite(dUf) && dUf > 0;
+  const uwOwn = W.uwDecl !== null && W.uwDecl !== undefined && W.uwDecl !== '' && isFinite(dUw) && dUw > 0;
+  const uf = ufOwn ? dUf : FR.uf;
+  return { fg, uf, ufOwn, uwOwn, uw:uwOwn ? dUw : uWindow(G.ug, uf, fg) };
+}
 const uWithDevice = (uw, dr) => 1 / (1 / uw + dr);
 const uDayNight = (uw, uws) => (uw + uws) / 2;
 
@@ -2903,6 +2913,16 @@ const slugify = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
 /** A number field, for a value the student wants to type rather than drag. */
+/** An optional figure the student may type: empty keeps the table's value (shown greyed as its placeholder). */
+function declCtl(labelText, value, placeholder, onchange, disabled) {
+  const inp = el('input', { type:'number', id:ctlId(), min:0.3, max:7, step:0.01, value:value === null || value === undefined ? '' : value,
+    placeholder:placeholder === null || placeholder === undefined ? '' : String(placeholder),
+    onchange: e => { const s = String(e.target.value).trim(); const v = +s; onchange(s === '' || !isFinite(v) || v <= 0 ? null : Math.round(clamp(v, 0.3, 7) * 100) / 100); } });
+  inp.style.width = '92px'; if (disabled) inp.disabled = true;
+  const wrap = el('div', { class:'ctl' }, [el('label', { text:labelText, for:inp.id }), inp, el('span', { text:'W/(m²·°C)', style:'font-size:11px;color:var(--muted)' })]);
+  wrap.input = inp;
+  return wrap;
+}
 function numCtl(labelText, min, max, step, value, onchange, unit) {
   const inp = el('input', { type:'number', id:ctlId(), min:min, max:max, step:step, value:value,
     onchange: e => {
@@ -4453,7 +4473,7 @@ function buildWallsInt(host) {
 }
 
 /* ------------------------------------------------------------ WINDOWS -- */
-const WIN_STATE = { frame:'pvcmad', quad:false, glaz:0, use:'hab', dev:'perspv', ori:4, privacy:false, impact:false, areas:{} };
+const WIN_STATE = { frame:'pvcmad', quad:false, glaz:0, use:'hab', dev:'perspv', ori:4, privacy:false, impact:false, areas:{}, ufDecl:null, uwDecl:null };
 
 function buildWindows(host) {
   const Z = STATE.zone;
@@ -4465,10 +4485,8 @@ function buildWindows(host) {
     const use = STATE.site.use || 'hab';
     const limU = umax(Z, 'glaz', use);
     const FR = FRAMES.find(f => f.key === S.frame) || FRAMES[2];
-    const fg = S.quad ? FR.fgq : FR.fg;
     const G  = GLAZING[clamp(S.glaz, 0, GLAZING.length - 1)];
-    const uf = FR.uf;
-    const uw = uWindow(G.ug, uf, fg);
+    const WU = winU(S, G, FR), fg = WU.fg, uf = WU.uf, uw = WU.uw;
     const DV = DELTA_R.find(d => d.key === S.dev) || DELTA_R[5];
     const uws = uWithDevice(uw, DV.dr);
     const wdn = uDayNight(uw, uws);
@@ -4479,6 +4497,9 @@ function buildWindows(host) {
       selectCtl(t('Frame'), FRAMES.map(f => ({ value:f.key, label:t(f.name) })), S.frame,
         v => { S.frame = v; rerender(); }),
       checkCtl(t('With glazing bars'), S.quad, v => { S.quad = v; rerender(); }),
+      /* what the manufacturer declares, when the student has it: left empty, the tables stand */
+      declCtl(t('Declared Uf (manufacturer)'), S.ufDecl, FR.uf === null ? null : FR.uf, v => { S.ufDecl = v; rerender(); }, FR.uf === null),
+      declCtl(t('Declared Uw (manufacturer)'), S.uwDecl, +uWindow(G.ug, uf, fg).toFixed(2), v => { S.uwDecl = v; rerender(); }),
       el('div', { class:'divider' }),
       selectCtl(t('Night-time device'), DELTA_R.map(d => ({ value:d.key, label:t(d.name) })), S.dev,
         v => { S.dev = v; rerender(); })
@@ -4493,9 +4514,10 @@ function buildWindows(host) {
     ]));
     frag.appendChild(el('div', { class:'limitrow' }, [
       el('span', { html: verdict(uw, limU) }),
-      el('span', { html: 'U<sub>w</sub> = F<sub>g</sub> · U<sub>g</sub> + (1 − F<sub>g</sub>) · U<sub>f</sub> = '
+      el('span', { html: WU.uwOwn ? 'U<sub>w</sub> = <b>' + fmt(uw, 2) + '</b> — ' + t('declared by the manufacturer (EN 14351-1); the formula is not used')
+        : 'U<sub>w</sub> = F<sub>g</sub> · U<sub>g</sub> + (1 − F<sub>g</sub>) · U<sub>f</sub> = '
         + fmt(fg, 2) + ' · ' + fmt(G.ug, 1) + ' + ' + fmt(1 - fg, 2) + ' · '
-        + (uf === null ? fmt(G.ug, 1) : fmt(uf, 2)) + ' = <b>' + fmt(uw, 2) + '</b>' }),
+        + (uf === null ? fmt(G.ug, 1) : fmt(uf, 2)) + ' = <b>' + fmt(uw, 2) + '</b>' + (WU.ufOwn ? ' (' + t('U<sub>f</sub> declared by the manufacturer') + ')' : '') }),
       el('span', { html: t('with the device closed') + ': <b>' + fmt(uws, 2) + '</b> W/(m²·°C)' })
     ]));
     frag.appendChild(hint('win-uw',
@@ -6761,14 +6783,13 @@ function exportPptx(format) {
     // ---- 7. windows ----
     {
       const W = WIN_STATE, G = GLAZING[W.glaz], F = FRAMES.find(f => f.key === W.frame);
-      const fg = W.quad ? F.fgq : F.fg;
-      const uw = F.uf === null ? G.ug : fg * G.ug + (1 - fg) * F.uf;
+      const WU = winU(W, G, F), fg = WU.fg, uw = WU.uw;
       const lim = umax(Z, 'glaz', W.use);
       const dn = DELTA_R.find(d => d.key === W.dev);
       S2.push(head(t('Windows'), t(GLAZ_FAMILY[G.f].name), Z.wz).concat([
         R.table({ x:0.6, y:1.9, colW:[2.8, 5.6], rowH:0.42, rows:[
           [{ t:t('Glazing'), b:1 }, { t:t(GLAZ_FAMILY[G.f].name) + ' — Ug ' + fmt(G.ug, 1) + ', g ' + fmt(G.g, 2) }],
-          [{ t:t('Frame'), b:1 }, { t:t(F.name) + ' — Fg ' + fmt(fg, 2) + (F.uf === null ? '' : ', Uf ' + fmt(F.uf, 1)) }],
+          [{ t:t('Frame'), b:1 }, { t:t(F.name) + ' — Fg ' + fmt(fg, 2) + (WU.uf === null ? '' : ', Uf ' + fmt(WU.uf, WU.ufOwn ? 2 : 1) + (WU.ufOwn ? ' ' + t('(declared)') : '')) + (WU.uwOwn ? ' · Uw ' + fmt(WU.uw, 2) + ' ' + t('(declared)') : '') }],
           [{ t:t('Orientation'), b:1 }, { t:COMPASS8[W.ori] }],
           [{ t:t('Night shutter'), b:1 }, { t:dn ? t(dn.name) : W.dev }]
         ] }),
@@ -7311,7 +7332,7 @@ function variantFigures(key, snap) {
   if (sp.win) {
     const FR = FRAMES.find(f => f.key === snap.frame) || FRAMES[2];
     const G = GLAZING[clamp(+snap.glaz || 0, 0, GLAZING.length - 1)];
-    const uw = uWindow(G.ug, FR.uf, snap.quad ? FR.fgq : FR.fg);
+    const uw = winU(snap, G, FR).uw;
     const DV = DELTA_R.find(d => d.key === snap.dev) || DELTA_R[5];
     return { u:uw, u2:uDayNight(uw, uWithDevice(uw, DV.dr)), what:t(FR.name) + ' · Ug ' + fmt(G.ug, 1) };
   }
@@ -9760,7 +9781,15 @@ function initSetup() {
 }
 
 /* --- the application ------------------------------------------------------- */
+/** The region of a municipality named with or without its accents, when the region carried is not one of its own — a
+    study handed over with a region left on the list, or saved before — else the region as carried. */
+const caPlain = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+function nutsOfConc(conc, nuts) {
+  const c = Object.keys(CONCELHOS).find(k => caPlain(k) === caPlain(conc));
+  return c && CONCELHOS[c].length && CONCELHOS[c].indexOf(nuts) < 0 ? CONCELHOS[c][0] : nuts;
+}
 function mountApp(site, keepTab) {
+  if (site && site.conc) { const n = nutsOfConc(site.conc, site.nuts); if (n !== site.nuts) site = Object.assign({}, site, { nuts:n }); }
   STATE.site = site;
   STATE.zone = classify(site.nuts, site.alt);
   if (!STATE.zone) { toast('That region is not in the table'); return; }
@@ -10538,6 +10567,11 @@ Object.assign(PT, {
   "Glazing": "Vidro",
   "Frame": "Caixilharia",
   "With glazing bars": "Com quadrícula",
+  "Declared Uf (manufacturer)": "Uf declarado (fabricante)",
+  "Declared Uw (manufacturer)": "Uw declarado (fabricante)",
+  "declared by the manufacturer (EN 14351-1); the formula is not used": "declarado pelo fabricante (EN 14351-1); a fórmula não é usada",
+  "U<sub>f</sub> declared by the manufacturer": "U<sub>f</sub> declarado pelo fabricante",
+  "(declared)": "(declarado)",
   "with glazing bars": "com quadrícula",
   "Night-time device": "Dispositivo nocturno",
   "Glass and frame, weighted by F": "Vidro e caixilho, ponderados por F",
